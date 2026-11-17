@@ -1,0 +1,59 @@
+name: Agente Vela
+
+# Repository agente-vela, file .github/workflows/vela.yml (versione 1 del 17/11/2026, scheda 35).
+# Parte SOLO a mano (decisione di Gualtiero: nessun lancio automatico):
+#   Actions -> Agente Vela -> Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      modalita:
+        description: "scopri = cerca i link ai risultati su sailing.org e sailinggrandslam.com (non scrive mai); leggi = legge le classifiche di eventi_vela.csv"
+        type: choice
+        options:
+          - leggi
+          - scopri
+        default: leggi
+      solo_prova:
+        description: "Solo prova: legge e stampa la diagnosi, senza scrivere su Notion"
+        type: boolean
+        default: true
+      eventi:
+        description: "Facoltativo: id_evento da leggere, separati da virgola (vuoto = tutti)"
+        type: string
+        default: ""
+
+# due lanci contemporanei scriverebbero doppioni: il secondo aspetta che il primo finisca
+concurrency:
+  group: agente-vela
+  cancel-in-progress: false
+
+jobs:
+  vela:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installa il necessario
+        run: pip install -r requirements.txt
+      - name: Leggi le classifiche
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          DRY_RUN: ${{ inputs.solo_prova }}
+          MODALITA: ${{ inputs.modalita }}
+          EVENTI: ${{ inputs.eventi }}
+          TEMPO_MAX_MINUTI: "165"
+        # lo script scrive da solo il rapporto in rapporto_vela.txt
+        run: python -u scrape_vela.py
+      - name: Conserva rapporto ed elenchi (Artifacts in fondo alla pagina del lancio)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapporto-vela
+          path: |
+            rapporto_vela.txt
+            eventi_trovati.csv
+          if-no-files-found: ignore
