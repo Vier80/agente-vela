@@ -1,4 +1,14 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.3 del 17/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.4 del 17/11/2026, scheda 35)
+
+Novità della 1.4 (dopo il primo lancio vero, interrotto da un errore di rete):
+- le chiamate a Notion usano una connessione che resta aperta (meno "strette di mano" SSL);
+- se la rete si interrompe (SSLError, ConnectionError, timeout) l'agente aspetta e riprova
+  (fino a 6 volte, con attese crescenti) invece di fermarsi;
+- prima di ripetere la creazione di una riga controlla in Notion se quella riga c'è già
+  (ricerca sull'"ID Univoco"): così un errore "a metà" non crea doppioni;
+- un errore su una singola barca non ferma più tutto il lancio: la barca viene saltata e
+  contata tra gli errori; l'agente si ferma solo dopo 15 errori di fila (rete giù), con un
+  messaggio che invita a rilanciare.
 
 Novità della 1.3: LETTORE SAILTI. La piattaforma Sailti (sito del Sailing Grand Slam, Princesa
 Sofía, Mondiali iQFOiL...) mostra una classe alla volta: la pagina "resultsall" contiene l'elenco
@@ -740,16 +750,59 @@ def scopri():
 
 
 # ====================================================================== NOTION
-def notion(metodo, percorso, **kwargs):
-    """Chiamata all'API Notion; aspetta e riprova se Notion è occupato (429) o in errore (5xx)."""
+class ErroreRete(Exception):
+    """La chiamata a Notion non è andata a buon fine per un problema di rete o di Notion stesso."""
+
+
+_SESSIONE = None
+
+
+def sessione():
+    """Una sola connessione a Notion, riusata per tutte le chiamate (più veloce e più stabile)."""
+    global _SESSIONE
+    if _SESSIONE is None:
+        _SESSIONE = requests.Session()
+        _SESSIONE.headers.update(NOTION_HEADERS)
+    return _SESSIONE
+
+
+def nuova_sessione():
+    """Butta via la connessione (dopo un errore di rete) e ne apre una nuova alla prossima chiamata."""
+    global _SESSIONE
+    if _SESSIONE is not None:
+        _SESSIONE.close()
+    _SESSIONE = None
+
+
+def notion(metodo, percorso, riprova=True, **kwargs):
+    """Chiamata all'API Notion.
+    riprova=True  (letture): se la rete si interrompe o Notion è occupato (429) o in errore (5xx),
+                  aspetta e riprova fino a 6 volte.
+    riprova=False (creazione di una riga): al primo problema solleva ErroreRete; sarà crea_riga
+                  a controllare se la riga è stata creata comunque, prima di riprovare."""
+    tentativi = 6 if riprova else 1
     r = None
-    for tentativo in range(5):
-        r = requests.request(metodo, "https://api.notion.com/v1" + percorso,
-                             headers=NOTION_HEADERS, timeout=30, **kwargs)
+    for tentativo in range(tentativi):
+        attesa = min(60, 2 ** (tentativo + 1))      # 2, 4, 8, 16, 32, 60 secondi
+        try:
+            r = sessione().request(metodo, "https://api.notion.com/v1" + percorso, timeout=60, **kwargs)
+        except requests.exceptions.RequestException as err:
+            nuova_sessione()
+            if not riprova:
+                raise ErroreRete(f"rete: {type(err).__name__}")
+            log(f"    (rete interrotta: {type(err).__name__}; riprovo tra {attesa} s)")
+            time.sleep(attesa)
+            continue
         if r.status_code == 429 or r.status_code >= 500:
-            time.sleep(float(r.headers.get("Retry-After", 2)) + tentativo)
+            if not riprova:
+                raise ErroreRete(f"Notion ha risposto {r.status_code}")
+            time.sleep(max(attesa, float(r.headers.get("Retry-After", 0) or 0)))
             continue
         break
+    if r is None:
+        raise ErroreRete("Notion non raggiungibile dopo 6 tentativi")
+    if r.status_code == 429 or r.status_code >= 500:
+        raise ErroreRete(f"Notion ha risposto {r.status_code} anche dopo 6 tentativi")
     if r.status_code == 404:
         raise RuntimeError("Notion non trova il database: aprilo, ••• > Connessioni, "
                            "aggiungi la connessione \"Agente Squash\".")
@@ -824,13 +877,36 @@ def valore_notion(tipo, v):
     raise RuntimeError(f"tipo di colonna non gestito: {tipo}. Usa testo, numero, selezione, data o URL.")
 
 
+def riga_presente(mappa, uid):
+    """True se nel db c'è già una riga con questo "ID Univoco" (ricerca mirata, una sola riga)."""
+    colonna, tipo = mappa["id"]
+    filtro = {"property": colonna, tipo: {"equals": uid}}
+    r = notion("POST", f"/databases/{DATABASE_ID}/query", json={"filter": filtro, "page_size": 1})
+    return bool(r["results"])
+
+
 def crea_riga(mappa, dati):
+    """Crea la riga della barca. Se la rete cade, prima di riprovare controlla che la riga non sia
+    stata creata comunque (succede se l'errore arriva DOPO che Notion ha ricevuto la richiesta)."""
     props = {}
     for chiave, (nome, tipo) in mappa.items():
         v = valore_notion(tipo, dati.get(chiave))
         if v is not None:
             props[nome] = v
-    notion("POST", "/pages", json={"parent": {"database_id": DATABASE_ID}, "properties": props})
+    ultimo = None
+    for tentativo in range(6):
+        if tentativo:
+            time.sleep(min(60, 2 ** tentativo))       # 2, 4, 8, 16, 32 secondi
+            if riga_presente(mappa, dati["id"]):
+                return                                # c'era già: niente doppione
+        try:
+            notion("POST", "/pages", riprova=False,
+                   json={"parent": {"database_id": DATABASE_ID}, "properties": props})
+            return
+        except ErroreRete as err:
+            ultimo = err
+            log(f"    ({dati['title']}: {err}; tentativo {tentativo + 1} di 6)")
+    raise ErroreRete(f"non scritta dopo 6 tentativi ({ultimo})")
 
 
 # ====================================================================== MODALITÀ "LEGGI"
@@ -995,7 +1071,7 @@ def leggi():
             mappa = leggi_schema()
             esistenti = id_esistenti(mappa)
             log(f"Barche già presenti in Notion: {len(esistenti)}")
-        except (SystemExit, RuntimeError) as e:
+        except (SystemExit, RuntimeError, ErroreRete) as e:
             if not DRY_RUN:
                 raise
             log(f"In prova continuo senza Notion ({e}).")
@@ -1013,8 +1089,8 @@ def leggi():
             "per la diagnosi, ma non scritta in Notion finché non indichi la tabella).")
 
     riepilogo = []          # (evento, classe, esito)
-    scritte = errori = 0
-    interrotto = False
+    scritte = errori = di_fila = 0
+    interrotto = rete_giu = False
     cache = {}              # la stessa pagina può servire a più classi: la scarico una volta sola
     for e in da_leggere:
         if not DRY_RUN and minuti() >= TEMPO_MAX_MINUTI:
@@ -1139,10 +1215,15 @@ def leggi():
                 crea_riga(mappa, r)
                 esistenti.add(r["id"])
                 scritte += 1
+                di_fila = 0
                 time.sleep(PAUSA_NOTION)
-            except RuntimeError as err:
+            except (RuntimeError, ErroreRete) as err:
                 log(f"  Errore su {r['title']}: {err}")
                 errori += 1
+                di_fila += 1
+                if di_fila >= 15:             # 15 errori consecutivi: Notion o la rete sono giù
+                    interrotto = rete_giu = True
+                    break
         if interrotto:
             break
 
@@ -1158,6 +1239,10 @@ def leggi():
         log("\nProva terminata: non è stato scritto nulla su Notion.")
     else:
         log(f"Righe scritte: {scritte} · errori: {errori} · minuti: {minuti():.0f}")
+    if rete_giu:
+        log("ATTENZIONE: mi sono fermato dopo 15 errori di fila (Notion o la rete non rispondono). "
+            "Rilancia più tardi con le stesse impostazioni: le barche già scritte vengono saltate.")
+        return 1
     if interrotto:
         log(f"ATTENZIONE: mi sono fermato dopo {TEMPO_MAX_MINUTI:.0f} minuti. Rilancia con le stesse "
             "impostazioni: le barche già scritte vengono saltate.")
@@ -1167,7 +1252,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.3 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.4 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
