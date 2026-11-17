@@ -1,4 +1,12 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.2 del 17/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.3 del 17/11/2026, scheda 35)
+
+Novità della 1.3: LETTORE SAILTI. La piattaforma Sailti (sito del Sailing Grand Slam, Princesa
+Sofía, Mondiali iQFOiL...) mostra una classe alla volta: la pagina "resultsall" contiene l'elenco
+delle classi e, per ognuna, l'indirizzo "resultsajax" da cui il browser scarica la classifica.
+L'agente legge l'elenco, sceglie la classe della riga di eventi_vela.csv e scarica direttamente
+quella classifica: niente browser e niente numero di tabella da indicare.
+Riconosce anche le colonne tipiche di Sailti: "CREW" (nomi a capo), "SAIL #", posizione senza
+titolo, prove "1P", "2P", "1 (US)".
 
 Novità della 1.2: BROWSER AUTOMATICO (Playwright con Chromium, come per l'agente UWW).
 Molte pagine (sailing.org, Sailti: Princesa Sofía, Sailing Grand Slam, iQFOiL) arrivano "vuote"
@@ -279,7 +287,13 @@ def chiave_titolo(testo):
 def testo_cella(cella):
     """Testo di una cella. Gli a capo (<br>, <p>, <div>) diventano "\n": servono a separare
     timoniere e prodiere quando stanno nella stessa cella. Se la cella contiene solo una
-    bandierina, uso il testo alternativo dell'immagine (spesso è il codice della nazione)."""
+    bandierina, uso il testo alternativo dell'immagine (spesso è il codice della nazione).
+    Tolgo le parti nascoste (Sailti vi mette codici per l'ordinamento, es. "a_0000001") e il
+    circolo velico (Sailti lo scrive tra un nome e l'altro dell'equipaggio)."""
+    for nascosto in cella.find_all(style=re.compile(r"display\s*:\s*none", re.I)):
+        nascosto.decompose()
+    for circolo in cella.find_all(class_=re.compile(r"club", re.I)):
+        circolo.decompose()
     for br in cella.find_all("br"):
         br.replace_with("\n")
     for blocco in cella.find_all(["p", "div", "li"]):
@@ -298,7 +312,7 @@ def testo_cella(cella):
 # Il confronto si fa sulla "chiave" del titolo (minuscole, senza spazi né punteggiatura).
 TITOLI = {
     "posizione": re.compile(r"^(rank|rk|pos|position|place|plc|pl|overall|ranking|#)$"),
-    "velico": re.compile(r"^(sail|sailno|sailnumber|sailnum|sailnr|boat|boatno|bow|bowno|nrvelico|numerovelico)$"),
+    "velico": re.compile(r"^(sail|sail#|sailno|sailnumber|sailnum|sailnr|boat|boatno|bow|bow#|bowno|nrvelico|numerovelico)$"),
     "nazione": re.compile(r"^(nat|nation|nationality|country|noc|ioc|mna|flag|naz|nazione|ctry)$"),
     "timoniere": re.compile(r"^(helm|helmname|helmsman|skipper|name|names|sailor|sailors|competitor|"
                             r"competitors|athlete|athletes|team|crewnames|timoniere|nome|rider|riders)$"),
@@ -309,7 +323,8 @@ TITOLI = {
     "totale": re.compile(r"^(total|tot|totalpts|totalpoints|gross)$"),
 }
 # Colonne delle singole prove: R1, Q3, F2, M, MR, Race 4, QF, SF, Final...
-PROVA = re.compile(r"^(r|q|f|m|mr|race|el|e|qs|fs|fl|g|s)?\d{1,2}$|^(m|mr|medal|medalrace|qf|sf|final|fin)$")
+PROVA = re.compile(r"^(r|q|f|m|mr|race|el|e|qs|fs|fl|g|s)?\d{1,2}$|^(m|mr|medal|medalrace|qf|sf|final|fin)$|"
+                   r"^\d{1,2}[a-z]{1,4}$")      # Sailti: "1P", "2P", "1 (US)"
 # Sigle delle prove non partite (per riconoscere le barche "mai partite": foglio, punto 13)
 NON_PARTITA = re.compile(r"\b(DNC|DNS)\b")
 
@@ -337,6 +352,11 @@ def riconosci_colonne(titoli):
     # se c'è solo "Total" (senza "Net"), il totale fa da punteggio
     if "netti" not in mappa and "totale" in mappa:
         mappa["netti"] = mappa["totale"]
+    # Sailti: una sola colonna "CREW" con tutti i nomi (a capo) e nessuna colonna "Helm":
+    # quella colonna fa da nome della barca. Solo se c'è un punteggio: così gli elenchi
+    # degli iscritti (es. "#, Sail Number, Skipper name, Crew name") non sembrano classifiche.
+    if "timoniere" not in mappa and "prodiere" in mappa and "netti" in mappa:
+        mappa["timoniere"] = mappa.pop("prodiere")
     mappa["prove"] = prove
     return mappa
 
@@ -366,7 +386,7 @@ def leggi_tabella(tabella):
         return out
 
     titoli = [pulisci(t.replace("\n", " ")) for t in celle(intestazione)]
-    corpo = []
+    corpo, ws = [], []
     dopo = False
     for tr in righe_html:
         if tr is intestazione:
@@ -374,10 +394,14 @@ def leggi_tabella(tabella):
             continue
         if not dopo or tr.find_parent("thead") is not None:
             continue
+        # ID World Sailing: alcune piattaforme (Sailti) collegano ogni nome al profilo
+        # https://www.sailing.org/sailor?ref=ESPJX1  → ESPJX1
+        ids = re.findall(r"sailing\.org/sailors?[^\"'<>]*?[?&]ref=([A-Za-z0-9]+)", str(tr))
         valori = celle(tr)
         if any(valori):
             corpo.append(valori)
-    return titoli, corpo
+            ws.append(list(dict.fromkeys(ids)))
+    return titoli, corpo, ws
 
 
 def numero(testo):
@@ -440,16 +464,22 @@ def tabelle_candidate(html):
         if t.find("table"):        # tabella che contiene altre tabelle: uso quelle interne
             TUTTE_LE_TABELLE.append((i, "contiene altre tabelle", 0))
             continue
-        titoli, righe = leggi_tabella(t)
+        titoli, righe, ws = leggi_tabella(t)
         TUTTE_LE_TABELLE.append((i, titoli[:10], len(righe)))
         mappa = riconosci_colonne(titoli)
+        # posizione in una prima colonna senza titolo (Sailti, Mondiali iQFOiL): la accetto se
+        # quasi tutte le righe hanno lì un numero
+        if "posizione" not in mappa and titoli and not titoli[0].strip() and righe:
+            numeri = sum(1 for r in righe if r and re.fullmatch(r"=?\d{1,3}\D{0,2}", r[0].strip()))
+            if numeri >= 0.8 * len(righe):
+                mappa["posizione"] = 0
         if "posizione" in mappa and "timoniere" in mappa and righe:
             # etichetta: didascalia della tabella o titolo più vicino sopra di essa (es. "ILCA 7 Men"):
             # serve a capire, nella diagnosi, di quale classe è la tabella
             vicino = t.find("caption") or t.find_previous(["h1", "h2", "h3", "h4", "h5", "caption"])
             etichetta = pulisci(vicino.get_text(" "))[:80] if vicino else ""
             candidate.append({"indice": i, "titoli": titoli, "righe": righe, "mappa": mappa,
-                              "etichetta": etichetta})
+                              "etichetta": etichetta, "ws": ws})
     return candidate, len(tutte)
 
 
@@ -489,24 +519,27 @@ def scegli_tabelle(candidate, indice_scelto=None):
 # Parole con cui una classe compare nel titolo di una tabella (per suggerire la tabella giusta
 # quando una pagina contiene più classi). Il genere si controlla a parte.
 PAROLE_CLASSE = {
-    "Men's Laser ILCA 7": r"ilca\s*7|\blaser\b(?!.*radial)",
-    "Women's Laser Radial ILCA 6": r"ilca\s*6|radial",
-    "Men's iQFOIL": r"iq\s*-?\s*foil", "Women's iQFOIL": r"iq\s*-?\s*foil",
-    "Men's 49er": r"49er(?!\s*-?\s*fx)", "Women's 49er FX": r"49er\s*-?\s*fx",
-    "Mixed 470": r"\b470\b", "Nacra 17": r"nacra|\bn17\b",
+    "Men's Laser ILCA 7": r"ilca[\s_-]*7|\blaser\b(?!.*radial)",
+    "Women's Laser Radial ILCA 6": r"ilca[\s_-]*6|radial",
+    "Men's iQFOIL": r"iq[\s_-]*foil", "Women's iQFOIL": r"iq[\s_-]*foil",
+    "Men's 49er": r"49er(?![\s_-]*fx)", "Women's 49er FX": r"49er[\s_-]*fx",
+    "Mixed 470": r"(?<!\d)470(?!\d)", "Nacra 17": r"nacra|\bn17\b",
     "Men's Kite": r"kite", "Women's Kite": r"kite",
 }
 DONNE = re.compile(r"women|woman|female|ladies|femm|\bw\b", re.I)
 
 
-def tabella_suggerita(candidate, classe):
-    """Indice della tabella il cui titolo corrisponde alla classe (None se nessuna o più d'una)."""
+def corrisponde_classe(testo, classe):
+    """Vero se un'etichetta (es. 'ilca-6', 'IQ FOIL Women', '49erFX') indica quella classe."""
     regola = re.compile(PAROLE_CLASSE[classe], re.I)
     serve_genere = classe in {"Men's iQFOIL", "Women's iQFOIL", "Men's Kite", "Women's Kite"}
     donna = classe.startswith("Women")
-    buone = [c["indice"] for c in candidate
-             if regola.search(c["etichetta"])
-             and (not serve_genere or bool(DONNE.search(c["etichetta"])) == donna)]
+    return bool(regola.search(testo or "")) and (not serve_genere or bool(DONNE.search(testo)) == donna)
+
+
+def tabella_suggerita(candidate, classe):
+    """Indice della tabella il cui titolo corrisponde alla classe (None se nessuna o più d'una)."""
+    buone = [c["indice"] for c in candidate if corrisponde_classe(c["etichetta"], classe)]
     return buone[0] if len(buone) == 1 else None
 
 
@@ -520,7 +553,7 @@ def righe_classifica(tabelle, classe):
             i = m.get(dato)
             return riga[i] if isinstance(i, int) and i < len(riga) else ""
 
-        for riga in t["righe"]:
+        for n_riga, riga in enumerate(t["righe"]):
             pos = numero(prendi(riga, "posizione"))
             nome = prendi(riga, "timoniere")
             if not isinstance(pos, int) or not nome.strip():
@@ -537,6 +570,8 @@ def righe_classifica(tabelle, classe):
             timoniere, prodiere = senza_nazione(timoniere, nazione), senza_nazione(prodiere, nazione)
             # ID World Sailing: se la piattaforma li mostra (per un equipaggio possono essere due)
             ids = re.findall(r"[A-Z]{3}[A-Z]{0,4}\d{1,6}|\d{4,8}", prendi(riga, "idws"))
+            if not ids and t.get("ws") and n_riga < len(t["ws"]):
+                ids = t["ws"][n_riga]          # ID presi dai link ai profili World Sailing
             # barca "mai partita": tutte le prove con DNC o DNS (foglio, punto 13)
             prove = [riga[i] for i in m["prove"] if i < len(riga) and riga[i].strip()]
             mai_partita = bool(prove) and all(NON_PARTITA.search(p.upper()) for p in prove)
@@ -869,6 +904,47 @@ def diagnosi_classifica(evento, candidate, n_tabelle, scelte, barche):
         log(f"  ATTENZIONE: {a}")
 
 
+def schede_sailti(url, html):
+    """Elenco delle classi di una pagina Sailti "resultsall": [(etichetta, indirizzo resultsajax)].
+
+    Sailti scrive le classi in due modi:
+      - menu a tendina (Princesa Sofía): <option data-href="/en/default/races/resultsajax?...">49er</option>
+      - schede con icone (Sailing Grand Slam, siti degli eventi): <a id="mnResults125_2261"
+        title="IQ FOIL Women"> con dentro <div class="ico-sailclass ilca-6">; l'indirizzo della
+        classifica sta nello script subito dopo "$('#mnResults125_2261').parent().addClass('active')".
+    """
+    zuppa = BeautifulSoup(html, "lxml")
+    schede = []
+    # 1) menu a tendina
+    for opz in zuppa.find_all("option"):
+        dh = opz.get("data-href") or ""
+        if "resultsajax" in dh:
+            schede.append((pulisci(opz.get_text(" ")), urljoin(url, dh)))
+    # 2) schede con icone: etichetta = titolo della scheda o nome della classe nell'icona
+    etichette = {}
+    generiche = {"ico-sailclass", "on", "off", "class-icon", "active"}
+    for a in zuppa.find_all("a", id=re.compile(r"^mnResults\d+_\d+$")):
+        parole = [a.get("title") or ""]
+        parole += [c for c in (a.get("class") or []) if c not in generiche and not c.isdigit()
+                   and not c.startswith("race")]
+        for d in a.find_all("div"):
+            parole += [c for c in (d.get("class") or []) if c not in generiche]
+        parole.append(pulisci(a.get_text(" ")))
+        etichette[a["id"]] = pulisci(" ".join(p for p in parole if p))
+    for m in re.finditer(r"""url:\s*['"]([^'"]*resultsajax[^'"]*)['"]""", html):
+        prima = html[max(0, m.start() - 700):m.start()]
+        ids = re.findall(r"#(mnResults\d+_\d+)['\"]\)", prima)   # ultima scheda nominata prima dell'indirizzo
+        if ids and ids[-1] in etichette:
+            schede.append((etichette[ids[-1]], urljoin(url, m.group(1))))
+    # tolgo i doppioni (la prima classe compare due volte: caricamento iniziale e clic)
+    visti, uniche = set(), []
+    for et, u in schede:
+        if u not in visti:
+            visti.add(u)
+            uniche.append((et, u))
+    return uniche
+
+
 def esamina_pagina_js(url, html):
     """Per una pagina senza tabelle elenca gli indizi su dove il browser va a prendere i dati:
     iframe, menu a tendina (spesso l'elenco delle classi), script, indirizzi negli script,
@@ -933,7 +1009,8 @@ def leggi():
     ambigue = {(e["id_evento"], e["classe"]) for e in da_leggere if per_url[e["url"]] > 1 and not e.get("tabella")}
     if ambigue:
         log(f"Righe con una pagina condivisa da più classi e senza 'tabella': {len(ambigue)} "
-            "(lette per la diagnosi, ma non scritte in Notion finché non indichi la tabella).")
+            "(per le pagine Sailti la classe si riconosce da sola; per le altre la riga viene letta "
+            "per la diagnosi, ma non scritta in Notion finché non indichi la tabella).")
 
     riepilogo = []          # (evento, classe, esito)
     scritte = errori = 0
@@ -964,8 +1041,39 @@ def leggi():
             log("  è un PDF: questa versione legge solo pagine web. [DA DECIDERE] lettore PDF.")
             riepilogo.append((e, "PDF"))
             continue
+        schede = schede_sailti(e["url"], html) if "resultsajax" in html else []
+        if schede:
+            # ---- piattaforma Sailti: scelgo la classe e scarico solo la sua classifica
+            log(f"  pagina Sailti con {len(schede)} classi: " + ", ".join(et for et, _ in schede))
+            giuste = [(et, u) for et, u in schede if corrisponde_classe(et, e["classe"])]
+            if len(giuste) != 1:
+                log(f"  ATTENZIONE: la classe {e['classe']} " + ("non c'è" if not giuste else "è ambigua")
+                    + " nell'elenco delle classi di questa pagina.")
+                riepilogo.append((e, "classe non trovata nella pagina Sailti" if not giuste else "classe ambigua"))
+                continue
+            et, u = giuste[0]
+            log(f"  classe «{et}» → {u}")
+            try:
+                if u not in cache:
+                    time.sleep(PAUSA_WEB)
+                    cache[u] = scarica(u)
+                    salva_pagina(u, cache[u][2])
+                html = cache[u][2]
+            except RuntimeError as err:
+                log(f"  classifica della classe non raggiungibile: {err}")
+                riepilogo.append((e, "non raggiungibile"))
+                errori += 1
+                continue
+            e["_sailti"] = True
+        elif "resultsajax" in html:
+            log("  pagina Sailti senza elenco delle classi (forse i risultati non sono ancora pubblicati).")
+            testo = pulisci(BeautifulSoup(html, "lxml").get_text(" "))
+            if re.search(r"not yet uploaded|no results", testo, re.I):
+                log("  il sito dice: risultati non ancora pubblicati.")
+            riepilogo.append((e, "Sailti senza risultati"))
+            continue
         candidate, n_tabelle = tabelle_candidate(html)
-        if not candidate and BROWSER.disponibile():
+        if not candidate and BROWSER.disponibile() and not e.get("_sailti"):
             # pagina senza classifiche: la riapro con il browser automatico (una volta sola per indirizzo)
             chiave = "browser:" + e["url"]
             if chiave not in cache:
@@ -990,6 +1098,8 @@ def leggi():
         barche = righe_classifica(scelte, e["classe"])
         diagnosi_classifica(e, candidate, n_tabelle, scelte, barche)
         if not barche:
+            if re.search(r"not yet uploaded any race results", html, re.I):
+                log("  il sito dice: risultati non ancora pubblicati su questa pagina.")
             if n_tabelle == 0 and re.search(r"<script", html, re.I):
                 log("  nessuna tabella: la pagina è probabilmente costruita con JavaScript "
                     "(es. Sailti, Manage2Sail). Serve un lettore apposito. Indizi trovati nella pagina:")
@@ -1014,7 +1124,7 @@ def leggi():
             log("  NON scritta: manca data_inizio in eventi_vela.csv.")
             riepilogo[-1] = (e, f"{len(barche)} barche, ma manca data_inizio")
             continue
-        if (e["id_evento"], e["classe"]) in ambigue:
+        if (e["id_evento"], e["classe"]) in ambigue and not e.get("_sailti"):
             log("  NON scritta: la pagina contiene più classi; indica il numero della tabella "
                 "giusta nella colonna 'tabella' di eventi_vela.csv (lo vedi qui sopra).")
             riepilogo[-1] = (e, f"{len(barche)} barche, ma manca 'tabella'")
@@ -1057,7 +1167,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.2 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.3 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
