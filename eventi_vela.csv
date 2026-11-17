@@ -1,0 +1,159 @@
+﻿# Elenco delle regate per l'Agente Vela (scheda 35). Una riga per evento e classe.
+# Si apre con Excel. Righe con # = commenti. Righe senza url = saltate.
+# tipo: Olimpiadi, Mondiali, Sailing Grand Slam, Europei, Giochi continentali, Altre regate
+# date nel formato AAAA-MM-GG; tabella = numero della tabella nella pagina (vuoto = automatico)
+id_evento;nome;tipo;data_inizio;data_fine;classe;url;tabella;note
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Men's Laser ILCA 7;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Women's Laser Radial ILCA 6;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Men's iQFOIL;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Women's iQFOIL;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Men's 49er;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Women's 49er FX;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Mixed 470;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Nacra 17;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Men's Kite;;;
+2025-sgs1-princesa-sofia;2025 Trofeo Princesa Sofía;Sailing Grand Slam;2025-03-28;2025-04-05;Women's Kite;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Men's Laser ILCA 7;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Women's Laser Radial ILCA 6;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Men's iQFOIL;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Women's iQFOIL;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Men's 49er;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Women's 49er FX;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Mixed 470;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Nacra 17;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Men's Kite;;;
+2025-sgs2-semaine-olympique;2025 Semaine Olympique Française;Sailing Grand Slam;2025-04-19;2025-04-26;Women's Kite;;;
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Men's Laser ILCA 7;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Men's iQFOIL;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Women's iQFOIL;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Men's 49er;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Women's 49er FX;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Mixed 470;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Nacra 17;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Men's Kite;;;[DA VERIFICARE] date e classi
+2025-sgs-dutch-water-week;2025 Dutch Water Week;Sailing Grand Slam;;;Women's Kite;;;[DA VERIFICARE] date e classi
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Men's Laser ILCA 7;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Men's iQFOIL;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Women's iQFOIL;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Men's 49er;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Women's 49er FX;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Mixed 470;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Nacra 17;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Men's Kite;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-kieler-woche;2025 Kieler Woche;Sailing Grand Slam;2025-06-21;2025-06-29;Women's Kite;;;[DA VERIFICARE] date della parte olimpica
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Men's Laser ILCA 7;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Women's Laser Radial ILCA 6;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Men's iQFOIL;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Women's iQFOIL;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Men's 49er;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Women's 49er FX;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Mixed 470;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Nacra 17;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Men's Kite;;;
+2025-sgs-long-beach;2025 Long Beach Olympic Classes Regatta;Sailing Grand Slam;2025-07-12;2025-07-20;Women's Kite;;;
+2025-mondiali-ilca7;2025 Mondiali ILCA 7;Mondiali;;;Men's Laser ILCA 7;;;[DA VERIFICARE] date (Risultati A: maggio 2025)
+2025-mondiali-ilca6;2025 Mondiali ILCA 6;Mondiali;;;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] date (Risultati A: maggio 2025)
+2025-mondiali-470;2025 Mondiali 470;Mondiali;;;Mixed 470;;;[DA VERIFICARE] date (Risultati A: giugno 2025)
+2025-mondiali-iqfoil;2025 Mondiali iQFOiL;Mondiali;;;Men's iQFOIL;;;[DA VERIFICARE] date (Risultati A: luglio 2025)
+2025-mondiali-iqfoil;2025 Mondiali iQFOiL;Mondiali;;;Women's iQFOIL;;;[DA VERIFICARE] date (Risultati A: luglio 2025)
+2025-mondiali-kite;2025 Mondiali Formula Kite (Quartu Sant'Elena);Mondiali;2025-09-28;2025-10-05;Men's Kite;;;
+2025-mondiali-kite;2025 Mondiali Formula Kite (Quartu Sant'Elena);Mondiali;2025-09-28;2025-10-05;Women's Kite;;;
+2025-mondiali-49er-fx-nacra;2025 Mondiali 49er, 49er FX e Nacra 17 (Cagliari);Mondiali;2025-10-07;2025-10-12;Men's 49er;https://49er.org/events/2025-world-championship/;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; stessa pagina per le 3 classi: indicare il numero della tabella"
+2025-mondiali-49er-fx-nacra;2025 Mondiali 49er, 49er FX e Nacra 17 (Cagliari);Mondiali;2025-10-07;2025-10-12;Women's 49er FX;https://49er.org/events/2025-world-championship/;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; stessa pagina per le 3 classi: indicare il numero della tabella"
+2025-mondiali-49er-fx-nacra;2025 Mondiali 49er, 49er FX e Nacra 17 (Cagliari);Mondiali;2025-10-07;2025-10-12;Nacra 17;https://49er.org/events/2025-world-championship/;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; stessa pagina per le 3 classi: indicare il numero della tabella"
+2025-europei-470;2025 Europei 470;Europei;;;Mixed 470;;;[DA VERIFICARE] date (Risultati A: maggio 2025)
+2025-europei-kite;2025 Europei Formula Kite;Europei;;;Men's Kite;;;[DA VERIFICARE] date (Risultati A: maggio 2025)
+2025-europei-kite;2025 Europei Formula Kite;Europei;;;Women's Kite;;;[DA VERIFICARE] date (Risultati A: maggio 2025)
+2025-europei-49er-fx-nacra;2025 Europei 49er, 49er FX e Nacra 17;Europei;;;Men's 49er;;;[DA VERIFICARE] date (Risultati A: giugno 2025)
+2025-europei-49er-fx-nacra;2025 Europei 49er, 49er FX e Nacra 17;Europei;;;Women's 49er FX;;;[DA VERIFICARE] date (Risultati A: giugno 2025)
+2025-europei-49er-fx-nacra;2025 Europei 49er, 49er FX e Nacra 17;Europei;;;Nacra 17;;;[DA VERIFICARE] date (Risultati A: giugno 2025)
+2025-europei-ilca7;2025 Europei ILCA 7;Europei;;;Men's Laser ILCA 7;;;[DA VERIFICARE] date (Risultati A: agosto 2025)
+2025-europei-ilca6;2025 Europei ILCA 6;Europei;;;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] date (Risultati A: agosto 2025)
+2025-europei-iqfoil;2025 Europei iQFOiL;Europei;;;Men's iQFOIL;;;[DA VERIFICARE] date (Risultati A: novembre 2025)
+2025-europei-iqfoil;2025 Europei iQFOiL;Europei;;;Women's iQFOIL;;;[DA VERIFICARE] date (Risultati A: novembre 2025)
+2026-iqfoil-games-lanzarote;2026 iQFOiL International Games Lanzarote;Altre regate;2026-02-06;2026-02-11;Men's iQFOIL;;;
+2026-iqfoil-games-lanzarote;2026 iQFOiL International Games Lanzarote;Altre regate;2026-02-06;2026-02-11;Women's iQFOIL;;;
+2026-iqfoil-games-cadiz;2026 iQFOiL International Games Cádiz;Altre regate;;2026-03-14;Men's iQFOIL;;;[DA VERIFICARE] data di inizio
+2026-iqfoil-games-cadiz;2026 iQFOiL International Games Cádiz;Altre regate;;2026-03-14;Women's iQFOIL;;;[DA VERIFICARE] data di inizio
+2026-europei-470;2026 Europei 470;Europei;;;Mixed 470;;;[DA VERIFICARE] date (Risultati A: marzo 2026)
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Men's Laser ILCA 7;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Women's Laser Radial ILCA 6;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Men's iQFOIL;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Women's iQFOIL;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Men's 49er;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Women's 49er FX;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Mixed 470;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Nacra 17;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Men's Kite;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs1-princesa-sofia;2026 Trofeo Princesa Sofía (SGS1);Sailing Grand Slam;2026-03-30;2026-04-04;Women's Kite;https://www.trofeoprincesasofia.org/en/default/races/race-resultsall;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; pagina unica per tutte le classi: indicare il numero della tabella"
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Men's Laser ILCA 7;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Women's Laser Radial ILCA 6;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Men's iQFOIL;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Women's iQFOIL;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Men's 49er;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Women's 49er FX;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Mixed 470;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Nacra 17;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Men's Kite;;;
+2026-sgs2-semaine-olympique;2026 Semaine Olympique Française (SGS2);Sailing Grand Slam;2026-04-18;2026-04-25;Women's Kite;;;
+2026-mondiali-kite;2026 Mondiali Formula Kite (Viana do Castelo);Mondiali;2026-05-09;2026-05-16;Men's Kite;;;Link visto: fir.com.pl/results/IKA/men.html e women.html, ma è la pagina dell'evento IKA in corso [DA VERIFICARE]
+2026-mondiali-kite;2026 Mondiali Formula Kite (Viana do Castelo);Mondiali;2026-05-09;2026-05-16;Women's Kite;;;Link visto: fir.com.pl/results/IKA/men.html e women.html, ma è la pagina dell'evento IKA in corso [DA VERIFICARE]
+2026-mondiali-49er-fx-nacra;2026 Mondiali 49er, 49er FX e Nacra 17 (Quiberon);Mondiali;2026-05-12;2026-05-17;Men's 49er;;;
+2026-mondiali-49er-fx-nacra;2026 Mondiali 49er, 49er FX e Nacra 17 (Quiberon);Mondiali;2026-05-12;2026-05-17;Women's 49er FX;;;
+2026-mondiali-49er-fx-nacra;2026 Mondiali 49er, 49er FX e Nacra 17 (Quiberon);Mondiali;2026-05-12;2026-05-17;Nacra 17;;;
+2026-europei-ilca;2026 Europei ILCA;Europei;;;Men's Laser ILCA 7;;;[DA VERIFICARE] date (Risultati A: maggio 2026)
+2026-europei-ilca;2026 Europei ILCA;Europei;;;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] date (Risultati A: maggio 2026)
+2026-europei-iqfoil;2026 Europei iQFOiL (Portimão);Europei;2026-05-16;2026-05-22;Men's iQFOIL;;;
+2026-europei-iqfoil;2026 Europei iQFOiL (Portimão);Europei;2026-05-16;2026-05-22;Women's iQFOIL;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Men's Laser ILCA 7;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Women's Laser Radial ILCA 6;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Men's iQFOIL;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Women's iQFOIL;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Men's 49er;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Women's 49er FX;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Mixed 470;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Nacra 17;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Men's Kite;;;
+2026-sgs3-dutch-water-week;2026 Dutch Water Week (SGS3);Sailing Grand Slam;2026-05-30;2026-06-07;Women's Kite;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Men's Laser ILCA 7;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Women's Laser Radial ILCA 6;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Men's iQFOIL;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Women's iQFOIL;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Men's 49er;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Women's 49er FX;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Mixed 470;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Nacra 17;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Men's Kite;;;
+2026-sgs4-kieler-woche;2026 Kieler Woche (SGS4);Sailing Grand Slam;2026-06-20;2026-06-24;Women's Kite;;;
+2026-europei-49er-fx-nacra;2026 Europei 49er, 49er FX e Nacra 17;Europei;;;Men's 49er;;;[DA VERIFICARE] date (Risultati A: luglio 2026)
+2026-europei-49er-fx-nacra;2026 Europei 49er, 49er FX e Nacra 17;Europei;;;Women's 49er FX;;;[DA VERIFICARE] date (Risultati A: luglio 2026)
+2026-europei-49er-fx-nacra;2026 Europei 49er, 49er FX e Nacra 17;Europei;;;Nacra 17;;;[DA VERIFICARE] date (Risultati A: luglio 2026)
+2026-sgs5-long-beach;2026 Long Beach Olympic Classes Regatta (SGS5);Sailing Grand Slam;2026-07-13;2026-07-16;Men's iQFOIL;;;
+2026-sgs5-long-beach;2026 Long Beach Olympic Classes Regatta (SGS5);Sailing Grand Slam;2026-07-13;2026-07-16;Women's iQFOIL;;;
+2026-sgs5-long-beach;2026 Long Beach Olympic Classes Regatta (SGS5);Sailing Grand Slam;2026-07-13;2026-07-16;Men's Kite;;;
+2026-sgs5-long-beach;2026 Long Beach Olympic Classes Regatta (SGS5);Sailing Grand Slam;2026-07-13;2026-07-16;Women's Kite;;;
+2026-sgs5-los-angeles-ilca-470;2026 Los Angeles OCR – ILCA e 470 (SGS5);Sailing Grand Slam;2026-07-19;2026-07-24;Men's Laser ILCA 7;;;
+2026-sgs5-los-angeles-ilca-470;2026 Los Angeles OCR – ILCA e 470 (SGS5);Sailing Grand Slam;2026-07-19;2026-07-24;Women's Laser Radial ILCA 6;;;
+2026-sgs5-los-angeles-ilca-470;2026 Los Angeles OCR – ILCA e 470 (SGS5);Sailing Grand Slam;2026-07-19;2026-07-24;Mixed 470;;;
+2026-sgs5-los-angeles-skiff;2026 Los Angeles OCR – 49er, 49er FX e Nacra 17 (SGS5);Sailing Grand Slam;2026-08-03;2026-08-08;Men's 49er;;;
+2026-sgs5-los-angeles-skiff;2026 Los Angeles OCR – 49er, 49er FX e Nacra 17 (SGS5);Sailing Grand Slam;2026-08-03;2026-08-08;Women's 49er FX;;;
+2026-sgs5-los-angeles-skiff;2026 Los Angeles OCR – 49er, 49er FX e Nacra 17 (SGS5);Sailing Grand Slam;2026-08-03;2026-08-08;Nacra 17;;;
+2026-mondiali-470;2026 Mondiali 470 (Enoshima);Mondiali;2026-08-10;2026-08-17;Mixed 470;;;
+2026-mondiali-ilca7;2026 Mondiali ILCA 7 (Dún Laoghaire);Mondiali;2026-08-23;2026-08-30;Men's Laser ILCA 7;;;
+2026-mondiali-ilca6;2026 Mondiali ILCA 6 femminili;Mondiali;;2026-09-12;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] sede e data di inizio
+2026-mondiali-iqfoil;2026 Mondiali iQFOiL (Weymouth);Mondiali;2026-09-07;2026-09-12;Men's iQFOIL;https://2026iqworldsweymouth.sailti.com;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; è la home dell'evento: serve la pagina della classifica"
+2026-mondiali-iqfoil;2026 Mondiali iQFOiL (Weymouth);Mondiali;2026-09-07;2026-09-12;Women's iQFOIL;https://2026iqworldsweymouth.sailti.com;;"[DA VERIFICARE] link visto in un articolo: controllare che porti alla classifica finale; è la home dell'evento: serve la pagina della classifica"
+2026-europei-kite;2026 Europei Formula Kite;Europei;;;Men's Kite;;;[DA VERIFICARE] date (Risultati A: settembre 2026)
+2026-europei-kite;2026 Europei Formula Kite;Europei;;;Women's Kite;;;[DA VERIFICARE] date (Risultati A: settembre 2026)
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Men's Laser ILCA 7;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Women's Laser Radial ILCA 6;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Men's iQFOIL;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Women's iQFOIL;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Men's 49er;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Women's 49er FX;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Mixed 470;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Nacra 17;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Men's Kite;;;[DA VERIFICARE] classi presenti e date
+2026-asian-games;2026 Asian Games (Aichi-Nagoya);Giochi continentali;;;Women's Kite;;;[DA VERIFICARE] classi presenti e date
