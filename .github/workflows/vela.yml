@@ -1,6 +1,6 @@
 name: Agente Vela
 
-# Repository agente-vela, file .github/workflows/vela.yml (versione 1 del 17/11/2026, scheda 35).
+# Repository agente-vela, file .github/workflows/vela.yml (versione 1.1 del 17/11/2026, scheda 35).
 # Parte SOLO a mano (decisione di Gualtiero: nessun lancio automatico):
 #   Actions -> Agente Vela -> Run workflow.
 on:
@@ -48,7 +48,7 @@ jobs:
           TEMPO_MAX_MINUTI: "165"
         # lo script scrive da solo il rapporto in rapporto_vela.txt
         run: python -u scrape_vela.py
-      - name: Conserva rapporto ed elenchi (Artifacts in fondo alla pagina del lancio)
+      - name: Conserva rapporto, elenchi e copie delle pagine (Artifacts in fondo alla pagina del lancio)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -56,4 +56,5 @@ jobs:
           path: |
             rapporto_vela.txt
             eventi_trovati.csv
+            pagine_salvate/
           if-no-files-found: ignore
