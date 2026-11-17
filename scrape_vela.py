@@ -1,4 +1,15 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1 del 17/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.1 del 17/11/2026, scheda 35)
+
+Novità della 1.1 (dopo i primi due lanci di prova):
+- "Net Score" riconosciuto come punteggio netto (pagine di 49er.org);
+- la diagnosi elenca TUTTE le tabelle della pagina e, per ogni classifica, il primo classificato
+  (così si capisce di che classe è);
+- ogni pagina letta viene salvata in pagine_salvate/ (Artifacts): Claude può studiarla senza
+  raggiungere il sito;
+- per le pagine senza tabelle (costruite con JavaScript, es. Sailti) la diagnosi elenca iframe,
+  menu a tendina, script e indirizzi interni che potrebbero contenere la classifica;
+- modalità "scopri": su sailing.org mostra un campione dei link della pagina, per capire perché
+  non trova gli eventi.
 
 Che cosa fa
 -----------
@@ -68,6 +79,7 @@ CARTELLA = os.path.dirname(os.path.abspath(__file__))
 FILE_EVENTI = os.path.join(CARTELLA, "eventi_vela.csv")
 FILE_TROVATI = os.path.join(CARTELLA, "eventi_trovati.csv")
 FILE_RAPPORTO = os.path.join(CARTELLA, "rapporto_vela.txt")
+CARTELLA_PAGINE = os.path.join(CARTELLA, "pagine_salvate")   # copie delle pagine lette (Artifacts)
 
 PAUSA_NOTION = 0.35   # secondi tra una scrittura e l'altra (Notion accetta circa 3 richieste al secondo)
 PAUSA_WEB = 1.0       # secondi tra due pagine dello stesso sito: siamo ospiti, non esageriamo
@@ -156,6 +168,18 @@ def scarica(url):
     raise RuntimeError(f"pagina non raggiungibile ({ultimo})")
 
 
+def salva_pagina(url, html):
+    """Salva una copia della pagina in pagine_salvate/ (finisce negli Artifacts del lancio).
+    Il nome del file è ricavato dall'indirizzo, es. 49er.org_events_2025-world-championship.html"""
+    try:
+        os.makedirs(CARTELLA_PAGINE, exist_ok=True)
+        nome = re.sub(r"[^A-Za-z0-9._-]+", "_", re.sub(r"^https?://(www\.)?", "", url)).strip("_")[:150]
+        with open(os.path.join(CARTELLA_PAGINE, nome + ".html"), "w", encoding="utf-8") as f:
+            f.write(html)
+    except OSError as e:          # un problema di salvataggio non deve fermare l'agente
+        log(f"  (copia della pagina non salvata: {e})")
+
+
 # ====================================================================== PULIZIA DEI TESTI
 def pulisci(testo):
     """Toglie spazi doppi e a capo superflui."""
@@ -196,7 +220,8 @@ TITOLI = {
                             r"competitors|athlete|athletes|team|crewnames|timoniere|nome|rider|riders)$"),
     "prodiere": re.compile(r"^(crew|crewname|crew1|prodiere|crewmember)$"),
     "idws": re.compile(r"^(wsid|sailorid|worldsailingid|isafid|wsno|memberid|ws)$"),
-    "netti": re.compile(r"^(net|nett|netpts|nettpts|netpoints|nettpoints|nettotal|total(net|nett)|punti|points|pts)$"),
+    "netti": re.compile(r"^(net|nett|netto|netpts|nettpts|netpoints|nettpoints|netscore|nettscore|nettotal|"
+                        r"total(net|nett)|punti|points|pts)$"),
     "totale": re.compile(r"^(total|tot|totalpts|totalpoints|gross)$"),
 }
 # Colonne delle singole prove: R1, Q3, F2, M, MR, Race 4, QF, SF, Final...
@@ -316,6 +341,9 @@ def senza_nazione(nome, noc):
     return pulisci(nome)
 
 
+TUTTE_LE_TABELLE = []   # (indice, titoli, righe) di ogni tabella della pagina, per la diagnosi
+
+
 def tabelle_candidate(html):
     """Tutte le tabelle della pagina che hanno almeno una colonna posizione e una colonna nome.
 
@@ -323,10 +351,13 @@ def tabelle_candidate(html):
     """
     zuppa = BeautifulSoup(html, "lxml")
     candidate, tutte = [], zuppa.find_all("table")
+    TUTTE_LE_TABELLE.clear()
     for i, t in enumerate(tutte):
         if t.find("table"):        # tabella che contiene altre tabelle: uso quelle interne
+            TUTTE_LE_TABELLE.append((i, "contiene altre tabelle", 0))
             continue
         titoli, righe = leggi_tabella(t)
+        TUTTE_LE_TABELLE.append((i, titoli[:10], len(righe)))
         mappa = riconosci_colonne(titoli)
         if "posizione" in mappa and "timoniere" in mappa and righe:
             # etichetta: didascalia della tabella o titolo più vicino sopra di essa (es. "ILCA 7 Men"):
@@ -463,8 +494,9 @@ def leggi_eventi():
         for campo in ("data_inizio", "data_fine"):
             if e.get(campo) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", e[campo]):
                 guai.append(f"{campo} '{e[campo]}' non è nel formato AAAA-MM-GG")
-        if e.get("url") and not e.get("data_inizio"):
-            guai.append("manca data_inizio (serve all'ELO per l'ordine delle regate)")
+        # senza data la pagina viene letta lo stesso (diagnosi), ma non scritta in Notion:
+        # la data serve all'ELO per mettere le regate in ordine
+        e["_senza_data"] = bool(e.get("url")) and not e.get("data_inizio")
         if e.get("tabella") and not e["tabella"].isdigit():
             guai.append("tabella deve essere un numero (o vuota)")
         e["_riga"], e["_guai"] = n, guai
@@ -497,11 +529,21 @@ def scopri():
             log(f"  NON raggiungibile: {e}")
             continue
         log(f"  risposta {codice} · {tipo} · {len(html)} caratteri")
+        salva_pagina(fonte, html)
         if codice >= 400:
             log("  il sito rifiuta la richiesta (blocco anti-robot?). Il blocco non va aggirato: "
                 "in quel caso si compila eventi_vela.csv a mano.")
             continue
         zuppa = BeautifulSoup(html, "lxml")
+        # campione dei link interni della pagina: serve a capire come sono fatti gli indirizzi degli eventi
+        interni = []
+        for a in zuppa.find_all("a", href=True):
+            u = urljoin(fonte, a["href"]).split("#")[0]
+            if dominio in urlparse(u).netloc and u not in interni:
+                interni.append(u)
+        log(f"  link interni nella pagina: {len(interni)}; primi 30:")
+        for u in interni[:30]:
+            log(f"    {u}")
         da_visitare = []
         for a in zuppa.find_all("a", href=True):
             url = urljoin(fonte, a["href"]).split("#")[0]
@@ -511,7 +553,9 @@ def scopri():
             # pagine interne da esplorare: eventi (sailing.org) o tutte le pagine interne (SGS)
             interna = dominio in urlparse(url).netloc
             if interna and url not in visitate and url.rstrip("/") != fonte.rstrip("/"):
-                if "sailing.org" in dominio and "/events/" not in url and "/event/" not in url:
+                # su sailing.org esploro solo le pagine che sembrano eventi
+                if "sailing.org" in dominio and not re.search(
+                        r"/events?/|championship|regatta|world-cup|grand-slam|olympic", url, re.I):
                     continue
                 da_visitare.append(url)
         log(f"  link interni da esplorare: {len(set(da_visitare))}")
@@ -678,6 +722,16 @@ def diagnosi_classifica(evento, candidate, n_tabelle, scelte, barche):
         log(f"    · tabella {c['indice']} «{c['etichetta']}»: {len(c['righe'])} righe · colonne riconosciute {riconosciute}"
             f" · prove {len(c['mappa']['prove'])}")
         log(f"      titoli: {c['titoli'][:14]}")
+        # primo classificato: aiuta a capire di quale classe è la tabella
+        primo = righe_classifica([c], evento["classe"])[:1]
+        if primo:
+            b = primo[0]
+            log(f"      primo classificato: {b['timoniere']}" + (f" / {b['prodiere']}" if b["prodiere"] else "")
+                + f" ({b['noc'] or '?'})")
+    indici_candidate = {c["indice"] for c in candidate}
+    for i, titoli, n in TUTTE_LE_TABELLE:
+        if i not in indici_candidate:
+            log(f"    · tabella {i} (non è una classifica): {n} righe · titoli {titoli}")
     if len(candidate) > 8:
         log(f"    ... e altre {len(candidate) - 8} tabelle")
     log(f"  tabelle usate: {[c['indice'] for c in scelte]}"
@@ -715,6 +769,35 @@ def diagnosi_classifica(evento, candidate, n_tabelle, scelte, barche):
         f"{sum(1 for b in barche if b['note'])}")
     for a in avvisi:
         log(f"  ATTENZIONE: {a}")
+
+
+def esamina_pagina_js(url, html):
+    """Per una pagina senza tabelle elenca gli indizi su dove il browser va a prendere i dati:
+    iframe, menu a tendina (spesso l'elenco delle classi), script, indirizzi negli script,
+    link con parole come 'result', 'race', 'class'. Servono a Claude per scrivere il lettore apposito."""
+    zuppa = BeautifulSoup(html, "lxml")
+    for f in zuppa.find_all("iframe")[:10]:
+        log(f"    iframe: {urljoin(url, f.get('src') or '')}")
+    for sel in zuppa.find_all("select")[:6]:
+        opzioni = [(o.get("value", ""), pulisci(o.get_text(" "))) for o in sel.find_all("option")][:25]
+        log(f"    menu '{sel.get('name') or sel.get('id') or '?'}': {opzioni}")
+    for sc in zuppa.find_all("script", src=True)[:15]:
+        log(f"    script: {urljoin(url, sc['src'])}")
+    testo_script = " ".join(sc.get_text(" ") for sc in zuppa.find_all("script") if not sc.get("src"))
+    indirizzi = set(re.findall(r"[\"'](/[A-Za-z0-9_\-/.?=&%]*?(?:result|race|class|ajax|api|json)[A-Za-z0-9_\-/.?=&%]*)[\"']",
+                               testo_script, re.I))
+    indirizzi |= set(re.findall(r"https?://[^\s\"'<>]*(?:result|ajax|api|json)[^\s\"'<>]*", testo_script, re.I))
+    for ind in sorted(indirizzi)[:25]:
+        log(f"    indirizzo negli script: {ind}")
+    link = []
+    for a in zuppa.find_all("a", href=True):
+        h = urljoin(url, a["href"])
+        if re.search(r"result|race|class|regat|standing", h + " " + a.get_text(" "), re.I) and h not in link:
+            link.append(h)
+    for h in link[:40]:
+        log(f"    link: {h}")
+    for el in zuppa.find_all(attrs={"data-url": True})[:10]:
+        log(f"    data-url: {urljoin(url, el['data-url'])}")
 
 
 def leggi():
@@ -768,6 +851,7 @@ def leggi():
             if e["url"] not in cache:
                 time.sleep(PAUSA_WEB)
                 cache[e["url"]] = scarica(e["url"])
+                salva_pagina(e["url"], cache[e["url"]][2])
             codice, tipo, html = cache[e["url"]]
         except RuntimeError as err:
             log(f"  NON raggiungibile: {err}")
@@ -789,7 +873,8 @@ def leggi():
         if not barche:
             if n_tabelle == 0 and re.search(r"<script", html, re.I):
                 log("  nessuna tabella: la pagina è probabilmente costruita con JavaScript "
-                    "(es. Manage2Sail). Serve un lettore apposito.")
+                    "(es. Sailti, Manage2Sail). Serve un lettore apposito. Indizi trovati nella pagina:")
+                esamina_pagina_js(e["url"], html)
             riepilogo.append((e, "nessuna classifica letta"))
             continue
         riepilogo.append((e, f"{len(barche)} barche"))
@@ -806,6 +891,10 @@ def leggi():
                           "inizio": e.get("data_inizio"), "fine": e.get("data_fine") or e.get("data_inizio"),
                           "fonte": e["url"], "id": uid})
         log(f"  da scrivere: {len(nuove)} (già presenti: {len(barche) - len(nuove)})")
+        if e["_senza_data"]:
+            log("  NON scritta: manca data_inizio in eventi_vela.csv.")
+            riepilogo[-1] = (e, f"{len(barche)} barche, ma manca data_inizio")
+            continue
         if (e["id_evento"], e["classe"]) in ambigue:
             log("  NON scritta: la pagina contiene più classi; indica il numero della tabella "
                 "giusta nella colonna 'tabella' di eventi_vela.csv (lo vedi qui sopra).")
