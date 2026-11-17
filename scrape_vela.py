@@ -1,4 +1,11 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.1 del 17/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.2 del 17/11/2026, scheda 35)
+
+Novità della 1.2: BROWSER AUTOMATICO (Playwright con Chromium, come per l'agente UWW).
+Molte pagine (sailing.org, Sailti: Princesa Sofía, Sailing Grand Slam, iQFOiL) arrivano "vuote"
+e la classifica la costruisce il browser con JavaScript. Quando una pagina non contiene tabelle,
+l'agente la riapre con un browser vero senza finestra, aspetta che la classifica compaia e la
+legge da lì. Intanto annota i dati JSON che la pagina scarica (pagine_salvate/json/): se un sito
+ha un'interfaccia dati comoda, nelle versioni successive la si potrà leggere direttamente.
 
 Novità della 1.1 (dopo i primi due lanci di prova):
 - "Net Score" riconosciuto come punteggio netto (pagine di 49er.org);
@@ -58,6 +65,11 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+try:                                   # il browser automatico è facoltativo: senza, l'agente
+    from playwright.sync_api import sync_playwright   # funziona come la versione 1.1
+except ImportError:
+    sync_playwright = None
 
 AVVIO = time.monotonic()   # orologio di partenza, per fermarsi prima del limite di GitHub
 
@@ -168,16 +180,88 @@ def scarica(url):
     raise RuntimeError(f"pagina non raggiungibile ({ultimo})")
 
 
-def salva_pagina(url, html):
+def salva_pagina(url, html, estensione=".html"):
     """Salva una copia della pagina in pagine_salvate/ (finisce negli Artifacts del lancio).
-    Il nome del file è ricavato dall'indirizzo, es. 49er.org_events_2025-world-championship.html"""
+    Il nome del file è ricavato dall'indirizzo, es. 49er.org_events_2025-world-championship.html.
+    Un nome che inizia con "json/" finisce nella sottocartella json/."""
     try:
-        os.makedirs(CARTELLA_PAGINE, exist_ok=True)
-        nome = re.sub(r"[^A-Za-z0-9._-]+", "_", re.sub(r"^https?://(www\.)?", "", url)).strip("_")[:150]
-        with open(os.path.join(CARTELLA_PAGINE, nome + ".html"), "w", encoding="utf-8") as f:
+        sotto = ""
+        if url.startswith("json/"):
+            sotto, url = "json", url[5:]
+        cartella = os.path.join(CARTELLA_PAGINE, sotto)
+        os.makedirs(cartella, exist_ok=True)
+        nome = re.sub(r"[^A-Za-z0-9._-]+", "_", re.sub(r"https?://(www\.)?", "", url)).strip("_")[:150]
+        with open(os.path.join(cartella, nome + estensione), "w", encoding="utf-8") as f:
             f.write(html)
     except OSError as e:          # un problema di salvataggio non deve fermare l'agente
         log(f"  (copia della pagina non salvata: {e})")
+
+
+# ====================================================================== BROWSER AUTOMATICO
+class Browser:
+    """Un solo Chromium senza finestra per tutto il lancio (aprirlo costa qualche secondo).
+
+    apri(url) restituisce il codice HTML DOPO che il JavaScript della pagina ha lavorato,
+    e salva in pagine_salvate/json/ le risposte JSON che la pagina ha scaricato.
+    """
+
+    def __init__(self):
+        self._pw = self._browser = None
+        self.json_visti = []          # (indirizzo, lunghezza) dei dati JSON scaricati dall'ultima pagina
+
+    def disponibile(self):
+        return sync_playwright is not None
+
+    def _avvia(self):
+        if self._browser is None:
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch(headless=True)
+
+    def apri(self, url, attesa_tabella_ms=20000):
+        self._avvia()
+        pagina = self._browser.new_page(user_agent=UA, locale="en-GB")
+        self.json_visti = []
+        catturati = []
+
+        def su_risposta(risposta):
+            # annoto solo i dati JSON (spesso è lì che arriva la classifica)
+            try:
+                if "json" in (risposta.headers.get("content-type") or ""):
+                    catturati.append(risposta)
+            except Exception:
+                pass
+
+        pagina.on("response", su_risposta)
+        try:
+            pagina.goto(url, wait_until="networkidle", timeout=90000)
+        except Exception as e:            # pagina lenta: proseguo con quello che c'è
+            log(f"  (il browser non ha finito di caricare: {str(e)[:120]})")
+        try:
+            pagina.wait_for_selector("table", timeout=attesa_tabella_ms)
+        except Exception:
+            pass                          # nessuna tabella comparsa: lo dirà la diagnosi
+        html = pagina.content()
+        for i, r in enumerate(catturati[:40]):
+            try:
+                corpo = r.text()
+            except Exception:
+                continue
+            self.json_visti.append((r.url, len(corpo)))
+            salva_pagina(f"json/{i:02d}_{r.url}", corpo, estensione=".json")
+        pagina.close()
+        return html
+
+    def chiudi(self):
+        try:
+            if self._browser:
+                self._browser.close()
+            if self._pw:
+                self._pw.stop()
+        except Exception:
+            pass
+
+
+BROWSER = Browser()
 
 
 # ====================================================================== PULIZIA DEI TESTI
@@ -534,6 +618,18 @@ def scopri():
             log("  il sito rifiuta la richiesta (blocco anti-robot?). Il blocco non va aggirato: "
                 "in quel caso si compila eventi_vela.csv a mano.")
             continue
+        usa_browser = False
+        if len(re.findall(r"<a\s", html)) < 40 and BROWSER.disponibile():
+            # pochi link: l'elenco degli eventi lo costruisce il JavaScript (sailing.org usa Nuxt).
+            log("  pochi link nella pagina scaricata: la riapro con il browser automatico...")
+            try:
+                html = BROWSER.apri(fonte, attesa_tabella_ms=3000)
+                salva_pagina(fonte + "__browser", html)
+                usa_browser = True
+                n_link = len(re.findall(r"<a\s", html))
+                log(f"  con il browser: {n_link} link")
+            except Exception as err:
+                log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
         zuppa = BeautifulSoup(html, "lxml")
         # campione dei link interni della pagina: serve a capire come sono fatti gli indirizzi degli eventi
         interni = []
@@ -560,17 +656,19 @@ def scopri():
                 da_visitare.append(url)
         log(f"  link interni da esplorare: {len(set(da_visitare))}")
         if len(re.findall(r"<a\s", html)) < 15:
-            log("  ATTENZIONE: la pagina ha pochissimi link: forse è costruita dal browser con "
-                "JavaScript e un programma semplice non vede l'elenco degli eventi.")
+            log("  ATTENZIONE: la pagina ha pochissimi link anche così: l'elenco degli eventi non è leggibile.")
         for url in list(dict.fromkeys(da_visitare))[:MAX_PAGINE_SCOPERTA]:
             if url in visitate:
                 continue
             visitate.add(url)
             time.sleep(PAUSA_WEB)
             try:
-                codice, tipo, html = scarica(url)
-            except RuntimeError as e:
-                log(f"  - {url}: {e}")
+                if usa_browser:            # stesso sito costruito con JavaScript: serve il browser
+                    codice, tipo, html = 200, "text/html", BROWSER.apri(url, attesa_tabella_ms=2000)
+                else:
+                    codice, tipo, html = scarica(url)
+            except Exception as e:
+                log(f"  - {url}: {str(e)[:160]}")
                 continue
             if codice >= 400 or "html" not in tipo.lower():
                 continue
@@ -867,6 +965,27 @@ def leggi():
             riepilogo.append((e, "PDF"))
             continue
         candidate, n_tabelle = tabelle_candidate(html)
+        if not candidate and BROWSER.disponibile():
+            # pagina senza classifiche: la riapro con il browser automatico (una volta sola per indirizzo)
+            chiave = "browser:" + e["url"]
+            if chiave not in cache:
+                log("  nessuna classifica nella pagina scaricata: la riapro con il browser automatico...")
+                try:
+                    html_b = BROWSER.apri(e["url"])
+                    salva_pagina(e["url"] + "__browser", html_b)
+                    cache[chiave] = (html_b, list(BROWSER.json_visti))
+                except Exception as err:
+                    log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
+                    cache[chiave] = ("", [])
+            html_b, json_visti = cache[chiave]
+            if json_visti:
+                log(f"  dati JSON scaricati dalla pagina: {len(json_visti)} (copie in pagine_salvate/json/)")
+                for u, n in json_visti[:12]:
+                    log(f"    {n:>8} caratteri · {u[:160]}")
+            if html_b:
+                html = html_b
+                candidate, n_tabelle = tabelle_candidate(html)
+                log(f"  con il browser: tabelle {n_tabelle}, classifiche {len(candidate)}")
         scelte = scegli_tabelle(candidate, int(e["tabella"]) if e.get("tabella") else None)
         barche = righe_classifica(scelte, e["classe"])
         diagnosi_classifica(e, candidate, n_tabelle, scelte, barche)
@@ -938,6 +1057,8 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
+    log(f"Agente Vela 1.2 · modalità {MODALITA} · browser automatico "
+        f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
         f"{dt.datetime.now():%Y-%m-%d %H:%M}")
@@ -958,6 +1079,7 @@ if __name__ == "__main__":
     except Exception:
         log(traceback.format_exc())
     finally:
+        BROWSER.chiudi()
         with open(FILE_RAPPORTO, "w", encoding="utf-8") as f:
             f.write("\n".join(_righe_log) + "\n")
     sys.exit(codice)
