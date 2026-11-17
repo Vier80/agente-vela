@@ -1,6 +1,6 @@
 name: Agente Vela
 
-# Repository agente-vela, file .github/workflows/vela.yml (versione 1.2 del 17/11/2026, scheda 35).
+# Repository agente-vela, file .github/workflows/vela.yml (versione 1.3 del 17/11/2026, scheda 35).
 # Parte SOLO a mano (decisione di Gualtiero: nessun lancio automatico):
 #   Actions -> Agente Vela -> Run workflow.
 on:
