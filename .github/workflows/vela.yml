@@ -1,6 +1,6 @@
 name: Agente Vela
 
-# Repository agente-vela, file .github/workflows/vela.yml (versione 1.1 del 17/11/2026, scheda 35).
+# Repository agente-vela, file .github/workflows/vela.yml (versione 1.2 del 17/11/2026, scheda 35).
 # Parte SOLO a mano (decisione di Gualtiero: nessun lancio automatico):
 #   Actions -> Agente Vela -> Run workflow.
 on:
@@ -38,6 +38,9 @@ jobs:
           python-version: "3.12"
       - name: Installa il necessario
         run: pip install -r requirements.txt
+      - name: Installa il browser automatico (Chromium per Playwright)
+        # serve alle pagine costruite con JavaScript (sailing.org, Sailti...)
+        run: python -m playwright install --with-deps chromium
       - name: Leggi le classifiche
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
