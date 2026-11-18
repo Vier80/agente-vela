@@ -1,4 +1,12 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.7 del 18/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.8 del 18/11/2026, scheda 35)
+
+Novità della 1.8 (Kite 2026 su Sailwave):
+- flotte che ripartono ciascuna dal 1° (Europei Kite 2026: Gold 1-25, Silver 1-31): se sopra ogni
+  tabella c'è il nome della flotta (Gold, Silver, Bronze...) le metto in fila e sposto le posizioni
+  (il 1° della Silver diventa il 26°). Prima l'agente avrebbe preso la sola Silver (la tabella più lunga);
+- contro i doppioni: l'elenco degli ID già presenti in Notion si legge in ordine fisso di creazione
+  (il 18/11 una riga, Mateus ISAAC ai Mondiali iQFOiL 2026, era stata riscritta) e il registro
+  segnala se nel db ci sono righe doppie.
 
 Novità della 1.7: se la scheda Sailti scelta è vuota («There are no results for this class», Europei e
 Mondiali 470 2026) prova la «Final Series» e poi le altre schede della classe; la nazione si ricava
@@ -516,8 +524,32 @@ def tabelle_candidate(html):
             vicino = t.find("caption") or t.find_previous(["h1", "h2", "h3", "h4", "h5", "caption"])
             etichetta = pulisci(vicino.get_text(" "))[:80] if vicino else ""
             candidate.append({"indice": i, "titoli": titoli, "righe": righe, "mappa": mappa,
-                              "etichetta": etichetta, "ws": ws})
+                              "etichetta": etichetta, "ws": ws, "flotta": flotta_tabella(t)})
     return candidate, len(tutte)
+
+
+# Nomi delle flotte in cui si divide una classifica finale, nell'ordine in cui si mettono in fila
+ORDINE_FLOTTE = {"gold": 0, "silver": 1, "bronze": 2, "emerald": 3, "copper": 4}
+
+
+def flotta_tabella(t):
+    """Nome della flotta (gold, silver, ...) scritto subito sopra la tabella, oppure "".
+
+    Guardo la didascalia e poi i testi che precedono la tabella, fermandomi alla tabella
+    precedente (così il titolo 'Silver Fleet' non viene confuso con quello della flotta Gold)."""
+    testi = []
+    cap = t.find("caption")
+    if cap:
+        testi.append(cap.get_text(" "))
+    for s in t.find_all_previous(string=True, limit=40):
+        if s.find_parent("table") is not None:
+            break                      # sono arrivato dentro la tabella precedente: mi fermo
+        testi.append(str(s))
+    for testo in testi:                # il testo più vicino alla tabella viene prima
+        m = re.search(r"\b(gold|silver|bronze|emerald|copper)\b", testo, re.I)
+        if m:
+            return m.group(1).lower()
+    return ""
 
 
 def scegli_tabelle(candidate, indice_scelto=None):
@@ -538,6 +570,19 @@ def scegli_tabelle(candidate, indice_scelto=None):
                if c["mappa"]["posizione"] < len(r)]
         pos = [p for p in pos if isinstance(p, int)]
         return (min(pos), max(pos)) if pos else (0, -1)
+
+    # Flotte che ripartono ciascuna dal 1° (es. Sailwave Europei Kite 2026: Gold 1-25, Silver 1-31):
+    # le metto in fila nell'ordine Gold, Silver, Bronze... e sposto le posizioni
+    # (il 1° della Silver diventa il 26°). Vale solo se c'è una tabella per flotta e c'è la Gold.
+    con_flotta = [c for c in candidate if c.get("flotta")]
+    nomi = [c["flotta"] for c in con_flotta]
+    if (len(con_flotta) >= 2 and "gold" in nomi and len(set(nomi)) == len(nomi)
+            and all(intervallo(c)[0] == 1 for c in con_flotta)):
+        scelte, scarto = [], 0
+        for c in sorted(con_flotta, key=lambda c: ORDINE_FLOTTE[c["flotta"]]):
+            scelte.append({**c, "scarto": scarto})   # copia della tabella con lo spostamento
+            scarto += intervallo(c)[1]
+        return scelte
 
     ordinate = sorted(candidate, key=lambda c: intervallo(c)[0])
     unite, fine = [], 0
@@ -620,6 +665,7 @@ def righe_classifica(tabelle, classe):
             nome = prendi(riga, "timoniere")
             if not isinstance(pos, int) or not nome.strip():
                 continue          # riga di separazione, titolo di flotta, ecc.
+            pos += t.get("scarto", 0)   # flotte successive alla Gold (vedi scegli_tabelle)
             velico = pulisci(prendi(riga, "velico"))
             nazione = codice_nazione(prendi(riga, "nazione"), velico)
             if classe in DOPPI:
@@ -893,17 +939,24 @@ def testo_prop(prop):
 def id_esistenti(mappa):
     """Tutti gli "ID Univoco" già presenti nel db (per non scrivere doppioni)."""
     colonna = mappa["id"][0]
-    ids, cursore = set(), None
+    ids, cursore, pagine = set(), None, 0
     while True:
-        corpo = {"page_size": 100}
+        # ordine fisso (per data di creazione): senza un ordine, sfogliando migliaia di righe
+        # Notion può saltarne qualcuna, e una riga saltata verrebbe riscritta (doppione del 18/11)
+        corpo = {"page_size": 100,
+                 "sorts": [{"timestamp": "created_time", "direction": "ascending"}]}
         if cursore:
             corpo["start_cursor"] = cursore
         r = notion("POST", f"/databases/{DATABASE_ID}/query", json=corpo)
         for pagina in r["results"]:
+            pagine += 1
             uid = testo_prop(pagina["properties"].get(colonna, {}))
             if uid:
-                ids.add(uid)
+                ids.add(uid.strip())
         if not r.get("has_more"):
+            if pagine != len(ids):
+                log(f"  (righe lette in Notion: {pagine}; ID diversi: {len(ids)} → "
+                    f"{pagine - len(ids)} righe doppie o senza ID già presenti nel db)")
             return ids
         cursore = r["next_cursor"]
 
@@ -980,7 +1033,9 @@ def diagnosi_classifica(evento, candidate, n_tabelle, scelte, barche):
     log(f"  tabelle nella pagina: {n_tabelle}, con posizione e nome: {len(candidate)}")
     for c in candidate[:8]:
         riconosciute = {k: c["titoli"][v] for k, v in c["mappa"].items() if k != "prove"}
-        log(f"    · tabella {c['indice']} «{c['etichetta']}»: {len(c['righe'])} righe · colonne riconosciute {riconosciute}"
+        log(f"    · tabella {c['indice']} «{c['etichetta']}»"
+            + (f" [flotta {c['flotta']}]" if c.get("flotta") else "")
+            + f": {len(c['righe'])} righe · colonne riconosciute {riconosciute}"
             f" · prove {len(c['mappa']['prove'])}")
         log(f"      titoli: {c['titoli'][:14]}")
         # primo classificato: aiuta a capire di quale classe è la tabella
@@ -997,6 +1052,9 @@ def diagnosi_classifica(evento, candidate, n_tabelle, scelte, barche):
         log(f"    ... e altre {len(candidate) - 8} tabelle")
     log(f"  tabelle usate: {[c['indice'] for c in scelte]}"
         + ("  (unite: classifica divisa per flotte)" if len(scelte) > 1 else ""))
+    if any(c.get("scarto") for c in scelte):
+        log("  flotte messe in fila (ognuna ripartiva dal 1°): "
+            + ", ".join(f"{c['flotta']} dal {c['scarto'] + 1}°" for c in scelte))
     if evento.get("tabella") and not scelte:
         log(f"  ATTENZIONE: la tabella {evento['tabella']} indicata in eventi_vela.csv non è una tabella "
             "di classifica (vedi l'elenco qui sopra).")
@@ -1469,7 +1527,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.7 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.8 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
