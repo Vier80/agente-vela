@@ -1,4 +1,12 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.8 del 18/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.9 del 18/11/2026, scheda 35)
+
+Novità della 1.9 (Mondiali Kite 2026, classifiche solo in PDF):
+- LETTORE PDF (pdfplumber, da aggiungere a requirements.txt): un PDF di risultati viene trasformato in
+  una pagina HTML con le sue tabelle e poi letto come tutte le altre pagine (flotte comprese);
+- FILE DEL REPOSITORY: nella colonna url di eventi_vela.csv si può scrivere il percorso di un file
+  caricato a mano nel repository (es. pdf/2026_FK_Worlds_Men.pdf). Serve quando il sito dà solo link
+  "a scadenza" (la bacheca racingrulesofsailing.org crea link validi 7 giorni). In quel caso la colonna
+  Fonte di Notion riceve il primo indirizzo web scritto nella colonna note (la bacheca ufficiale).
 
 Novità della 1.8 (Kite 2026 su Sailwave):
 - flotte che ripartono ciascuna dal 1° (Europei Kite 2026: Gold 1-25, Silver 1-31): se sopra ogni
@@ -121,6 +129,12 @@ try:                                   # il browser automatico è facoltativo: s
 except ImportError:
     sync_playwright = None
 
+try:                                   # lettore dei PDF (Mondiali Kite 2026): facoltativo anche lui
+    import io
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
 AVVIO = time.monotonic()   # orologio di partenza, per fermarsi prima del limite di GitHub
 
 # ====================================================================== IMPOSTAZIONI
@@ -214,16 +228,40 @@ def minuti():
 
 
 # ====================================================================== WEB
+def e_locale(url):
+    """Vero se nella colonna url c'è il percorso di un file del repository (es. pdf/2026_FK_Worlds_Men.pdf)
+    invece di un indirizzo web."""
+    return not re.match(r"https?://", url or "", re.I)
+
+
 def scarica(url):
-    """Scarica una pagina. Restituisce (codice HTTP, tipo di contenuto, testo) o solleva un errore."""
+    """Scarica una pagina. Restituisce (codice HTTP, tipo di contenuto, testo) o solleva un errore.
+
+    Due casi speciali (versione 1.9):
+    - FILE DEL REPOSITORY: se url non comincia con http, apro il file nella cartella dell'agente
+      (es. il PDF dei Mondiali Kite 2026 caricato a mano in pdf/);
+    - PDF: lo trasformo subito in una pagina HTML con le sue tabelle (pdf_in_html), così il resto
+      dell'agente lo legge come una pagina qualsiasi. Il tipo diventa "application/pdf (convertito)"."""
+    if e_locale(url):
+        percorso = os.path.join(CARTELLA, url)
+        if not os.path.exists(percorso):
+            raise RuntimeError(f"il file {url} non c'è nel repository (va caricato nella cartella giusta)")
+        with open(percorso, "rb") as f:
+            dati = f.read()
+        if url.lower().endswith(".pdf"):
+            return 200, "application/pdf (convertito)", pdf_in_html(dati)
+        return 200, "text/html", dati.decode("utf-8", errors="replace")
     ultimo = None
     for tentativo in range(3):
         try:
             r = WEB.get(url, timeout=60)
             if r.status_code >= 500:
                 raise RuntimeError(f"il sito ha risposto {r.status_code}")
+            tipo = r.headers.get("Content-Type", "")
+            if "pdf" in tipo.lower() or r.content[:5] == b"%PDF-":
+                return r.status_code, "application/pdf (convertito)", pdf_in_html(r.content)
             r.encoding = r.encoding or r.apparent_encoding   # accenti giusti anche senza dichiarazione
-            return r.status_code, r.headers.get("Content-Type", ""), r.text
+            return r.status_code, tipo, r.text
         except Exception as e:      # pagina lenta o errore temporaneo: riprovo
             ultimo = e
             time.sleep(3 + 3 * tentativo)
@@ -245,6 +283,199 @@ def salva_pagina(url, html, estensione=".html"):
             f.write(html)
     except OSError as e:          # un problema di salvataggio non deve fermare l'agente
         log(f"  (copia della pagina non salvata: {e})")
+
+
+# ====================================================================== PDF
+def _e_intestazione(riga):
+    """Vero se la riga di una tabella PDF è la riga dei titoli (contiene 'Rank', 'Pos'... e un nome)."""
+    chiavi = [chiave_titolo(c or "") for c in riga]
+    ha_pos = any(TITOLI["posizione"].match(k) for k in chiavi if k)
+    ha_nome = any(TITOLI["timoniere"].match(k) or TITOLI["prodiere"].match(k) for k in chiavi if k)
+    return ha_pos and ha_nome
+
+
+RANGO = re.compile(r"^=?\d{1,3}(st|nd|rd|th)?\.?$", re.I)     # "1st", "=3", "12", "4."
+
+
+def tabelle_da_testo(pagina, blocchi):
+    """Ricostruisce le tabelle di una pagina PDF SENZA righe disegnate, usando la posizione delle parole.
+
+    1) raggruppo le parole in righe di testo (stessa altezza sulla pagina);
+    2) la riga dei titoli (Rank ... Name ... Nett) fissa dove comincia ogni colonna;
+    3) in ogni riga unisco le parole vicine in "frasi" (es. "Maximilian MAEDER"), senza mai
+       scavalcare l'inizio di una colonna, e metto ogni frase nella colonna con cui si sovrappone di più;
+    4) una riga che comincia con una posizione ("1st", "12") è una barca; una riga senza posizione
+       subito dopo è la seconda riga della stessa cella (es. il prodiere);
+    5) "Gold Fleet", "Silver Fleet" fra una tabella e l'altra aprono una flotta nuova.
+    Le tabelle trovate vengono aggiunte a blocchi (stessa forma usata da pdf_in_html)."""
+    parole = pagina.extract_words(x_tolerance=1.5, y_tolerance=2, keep_blank_chars=False)
+    righe_testo = []                         # [[parola, ...], ...] dall'alto in basso
+    for w in sorted(parole, key=lambda w: (round(w["top"]), w["x0"])):
+        if righe_testo and abs(righe_testo[-1][0]["top"] - w["top"]) <= 2.5:
+            righe_testo[-1].append(w)
+        else:
+            righe_testo.append([w])
+    corrente = blocchi[-1] if blocchi else None
+    # colonne [(x0, x1, titolo)] della tabella aperta: se la tabella della pagina prima continua qui
+    # senza ripetere i titoli, uso le sue colonne (le righe stanno nella stessa posizione)
+    colonne = corrente.get("_colonne") if corrente else None
+    if corrente is not None:
+        corrente["_alto"] = None             # pagina nuova: nessuna riga precedente su questa pagina
+    titolo_sopra, flotta_sopra = "", ""
+    for riga in righe_testo:
+        riga.sort(key=lambda w: w["x0"])
+        testo = " ".join(w["text"] for w in riga)
+        flotta = re.search(r"\b(gold|silver|bronze|emerald|copper)\b", testo, re.I)
+        # --- riga dei titoli?
+        intest = _titoli_da_parole(riga)
+        if _e_intestazione([t for _, _, t in intest]):
+            titoli = [t for _, _, t in intest]
+            colonne = intest
+            if not (corrente and titoli == corrente["intestazione"]
+                    and (not flotta_sopra or flotta_sopra == corrente["flotta"])):
+                corrente = {"titolo": titolo_sopra, "flotta": flotta_sopra,
+                            "intestazione": titoli, "righe": []}
+                blocchi.append(corrente)
+            corrente["_alto"] = None         # (se la tabella continua dalla pagina prima)
+            corrente["_colonne"] = intest
+            titolo_sopra, flotta_sopra = "", ""
+            continue
+        if colonne is None:
+            # testo sopra la prima tabella della pagina: può essere il nome della flotta
+            if flotta:
+                titolo_sopra, flotta_sopra = testo[:80], flotta.group(1).lower()
+            continue
+        celle = _celle_da_parole(riga, colonne)
+        if RANGO.match(celle[0] or ""):
+            corrente["righe"].append(celle)                  # una barca
+            corrente["_alto"] = riga[0]["top"]
+            continue
+        if flotta and len(riga) <= 6:
+            # titolo di una nuova flotta: la prossima riga dei titoli aprirà una tabella nuova
+            titolo_sopra, flotta_sopra, colonne = testo[:80], flotta.group(1).lower(), None
+            continue
+        alto = corrente.get("_alto")
+        if corrente["righe"] and alto is not None and 0 < riga[0]["top"] - alto < 14:
+            # riga appena sotto una barca, senza posizione: seconda riga della stessa cella
+            # (es. il prodiere a capo). Le righe più lontane (piè di pagina, note) le ignoro.
+            for i, c in enumerate(celle):
+                if c:
+                    prima = corrente["righe"][-1][i]
+                    corrente["righe"][-1][i] = (prima + "\n" + c) if prima else c
+            corrente["_alto"] = riga[0]["top"]
+
+
+def _titoli_da_parole(riga):
+    """Dalla riga dei titoli ricava le colonne: [(x0, x1, titolo)]. Parole molto vicine
+    (es. "Lycra" "Nr.") formano un solo titolo."""
+    gruppi = []
+    for w in riga:
+        if gruppi and w["x0"] - gruppi[-1][1] <= 3.5:
+            x0, _, t = gruppi[-1]
+            gruppi[-1] = (x0, w["x1"], t + " " + w["text"])
+        else:
+            gruppi.append((w["x0"], w["x1"], w["text"]))
+    return gruppi
+
+
+def _celle_da_parole(riga, colonne):
+    """Mette le parole di una riga nelle colonne. Parole vicine formano una frase, ma una frase
+    non scavalca mai l'inizio di una colonna; la frase va nella colonna con cui si sovrappone di più."""
+    inizi = [c[0] for c in colonne]
+    fine_pagina = max(w["x1"] for w in riga) + 1000
+    frasi = []
+    for w in riga:
+        if frasi and w["x0"] - frasi[-1][1] <= 3.5 and not any(frasi[-1][1] < x - 1 <= w["x0"] for x in inizi):
+            x0, _, t = frasi[-1]
+            frasi[-1] = (x0, w["x1"], t + " " + w["text"])
+        else:
+            frasi.append((w["x0"], w["x1"], w["text"]))
+    celle = [""] * len(colonne)
+    for x0, x1, t in frasi:
+        migliore, sovr = 0, -1e9
+        for i, inizio in enumerate(inizi):
+            fine = inizi[i + 1] if i + 1 < len(inizi) else fine_pagina
+            s = min(x1, fine) - max(x0, inizio - 2)
+            if s > sovr:
+                migliore, sovr = i, s
+        celle[migliore] = (celle[migliore] + " " + t).strip()
+    return celle
+
+
+def pdf_in_html(dati):
+    """Trasforma un PDF di risultati in una pagina HTML con una <table> per ogni classifica.
+
+    Come funziona, pagina per pagina:
+    1) pdfplumber cerca le tabelle disegnate con le righe; se non ne trova, prova a ricostruirle
+       dall'allineamento del testo (molti PDF di Sailwave non hanno righe);
+    2) la riga dei titoli (Rank, Name, Nett...) diventa l'intestazione <th>;
+    3) il testo subito sopra la tabella (es. "Gold Fleet") diventa un titolo <h3>: serve a
+       scegli_tabelle per mettere in fila le flotte;
+    4) una tabella che continua sulla pagina dopo (stessi titoli, nessuna flotta nuova) viene unita
+       alla precedente.
+    Restituisce "" se pdfplumber non c'è o il PDF non contiene testo (es. una scansione)."""
+    if pdfplumber is None:
+        log("  (lettore PDF non disponibile: manca pdfplumber in requirements.txt)")
+        return ""
+    blocchi = []        # [{"titolo": str, "flotta": str, "intestazione": [...], "righe": [[...]]}]
+    try:
+        with pdfplumber.open(io.BytesIO(dati)) as pdf:
+            for pagina in pdf.pages:
+                tabelle = pagina.find_tables()
+                if not tabelle:
+                    # PDF senza righe disegnate (tipico di Sailwave): ricostruisco le colonne dalla
+                    # posizione delle parole sotto i titoli
+                    tabelle_da_testo(pagina, blocchi)
+                    continue
+                for t in tabelle:
+                    righe = [[pulisci((c or "").replace("\n", " \n ")).replace(" \n ", "\n") if c else ""
+                              for c in r] for r in t.extract()]
+                    righe = [r for r in righe if any(c.strip() for c in r)]
+                    if len(righe) < 2:
+                        continue
+                    # testo nei 60 punti sopra la tabella: ultima riga non vuota (es. "Gold Fleet")
+                    alto = t.bbox[1]
+                    sopra = pagina.crop((0, max(0, alto - 60), pagina.width, alto)).extract_text() or ""
+                    titolo = next((r for r in reversed(sopra.split("\n")) if r.strip()), "")
+                    m = re.search(r"\b(gold|silver|bronze|emerald|copper)\b", sopra, re.I)
+                    flotta = m.group(1).lower() if m else ""
+                    # riga dei titoli: fra le prime 5 righe
+                    i_int = next((i for i, r in enumerate(righe[:5]) if _e_intestazione(r)), None)
+                    prec = blocchi[-1] if blocchi else None
+                    if i_int is None:
+                        # nessuna intestazione: è la continuazione della tabella precedente
+                        if prec and len(righe[0]) == len(prec["intestazione"]):
+                            prec["righe"].extend(righe)
+                        continue
+                    intestazione, corpo = righe[i_int], righe[i_int + 1:]
+                    if (prec and intestazione == prec["intestazione"]
+                            and (not flotta or flotta == prec["flotta"])):
+                        prec["righe"].extend(corpo)          # stessa tabella, pagina successiva
+                    else:
+                        blocchi.append({"titolo": titolo, "flotta": flotta,
+                                        "intestazione": intestazione, "righe": corpo})
+    except Exception as err:            # PDF rovinato o protetto: lo dice la diagnosi
+        log(f"  (PDF non leggibile: {str(err)[:150]})")
+        return ""
+    if not blocchi:
+        log("  (nel PDF non ho trovato tabelle con Rank e nome: forse è una scansione)")
+        return ""
+
+    def cella(tag, testo):
+        return f"<{tag}>" + htmlmod.escape(testo).replace("\n", "<br>") + f"</{tag}>"
+
+    pezzi = ["<html><body><!-- pagina ricostruita dal PDF dall'Agente Vela -->"]
+    for b in blocchi:
+        pezzi.append(f"<h3>{htmlmod.escape(b['titolo'] or b['flotta'])}</h3>")
+        pezzi.append("<table><thead><tr>" + "".join(cella("th", c) for c in b["intestazione"])
+                     + "</tr></thead><tbody>")
+        for r in b["righe"]:
+            pezzi.append("<tr>" + "".join(cella("td", c) for c in r) + "</tr>")
+        pezzi.append("</tbody></table>")
+    pezzi.append("</body></html>")
+    log(f"  PDF convertito: {len(blocchi)} tabelle, "
+        + ", ".join(f"«{b['titolo'][:30] or b['flotta'] or '?'}» {len(b['righe'])} righe" for b in blocchi))
+    return "\n".join(pezzi)
 
 
 # ====================================================================== BROWSER AUTOMATICO
@@ -1247,6 +1478,16 @@ def link_successivo(url, html, classe):
     return None
 
 
+def fonte_notion(e):
+    """Indirizzo da scrivere nella colonna Fonte. Per un file del repository (es. pdf/...) uso il primo
+    indirizzo web scritto nella colonna note di eventi_vela.csv (la bacheca ufficiale), altrimenti nulla."""
+    fonte = e.get("_fonte") or e["url"]
+    if e_locale(fonte):
+        m = re.search(r"https?://[^\s;]+", e.get("note") or "")
+        return m.group(0) if m else None
+    return fonte
+
+
 def leggi():
     """Legge le classifiche di eventi_vela.csv e (se non è una prova) le scrive in Notion."""
     eventi, problemi = leggi_eventi()
@@ -1335,7 +1576,7 @@ def leggi():
         for _ in range(2):
             if barche_speciali is not None or "resultsajax" in html:
                 break
-            if len(html) < 2000 and BROWSER.disponibile():
+            if len(html) < 2000 and BROWSER.disponibile() and "pdf" not in tipo.lower() and not e_locale(e["_fonte"]):
                 # pagina quasi vuota (es. risposta 202 dei siti ILCA): la vera pagina la costruisce il browser
                 log("  pagina quasi vuota: la apro con il browser automatico per cercare i link...")
                 try:
@@ -1363,9 +1604,9 @@ def leggi():
             if codice >= 400:
                 break
             e["_fonte"], e["_seguita"] = nuovo, True
-        if "pdf" in tipo.lower() or e["url"].lower().endswith(".pdf"):
-            log("  è un PDF: questa versione legge solo pagine web. [DA DECIDERE] lettore PDF.")
-            riepilogo.append((e, "PDF"))
+        if "pdf" in tipo.lower() and not html.strip():
+            log("  PDF senza tabelle leggibili (vedi le righe qui sopra).")
+            riepilogo.append((e, "PDF non leggibile"))
             continue
         schede = [] if barche_speciali is not None else (schede_sailti(e["_fonte"], html) if "resultsajax" in html else [])
         if schede:
@@ -1419,7 +1660,8 @@ def leggi():
             log(f"  barche: {len(barche)} · mai partite: {sum(1 for b in barche if b['note'])}")
         else:
             candidate, n_tabelle = tabelle_candidate(html)
-            if not candidate and BROWSER.disponibile() and not e.get("_sailti"):
+            if (not candidate and BROWSER.disponibile() and not e.get("_sailti")
+                    and "pdf" not in tipo.lower() and not e_locale(e["url"])):
                 # pagina senza classifiche: la riapro con il browser automatico (una volta sola per indirizzo)
                 chiave = "browser:" + e["url"]
                 if chiave not in cache:
@@ -1464,7 +1706,7 @@ def leggi():
             nuove.append({**b, "title": titolo, "classe": e["classe"], "barche": len(barche),
                           "evento": e.get("nome") or e["id_evento"], "tipo": e["tipo"],
                           "inizio": e.get("data_inizio"), "fine": e.get("data_fine") or e.get("data_inizio"),
-                          "fonte": e.get("_fonte") or e["url"], "id": uid})
+                          "fonte": fonte_notion(e), "id": uid})
         log(f"  da scrivere: {len(nuove)} (già presenti: {len(barche) - len(nuove)})")
         if min(b["posizione"] for b in barche) > 1:
             # es. pagina Sailwave "provvisoria" senza i primi 10 della finale: non scrivo una classifica a metà
@@ -1527,8 +1769,9 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.8 · modalità {MODALITA} · browser automatico "
-        f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
+    log(f"Agente Vela 1.9 · modalità {MODALITA} · browser automatico "
+        f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'} · lettore PDF "
+        f"{'disponibile' if pdfplumber else 'NON disponibile (manca pdfplumber)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
         f"{dt.datetime.now():%Y-%m-%d %H:%M}")
