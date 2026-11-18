@@ -1,4 +1,8 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.6 del 18/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.7 del 18/11/2026, scheda 35)
+
+Novità della 1.7: se la scheda Sailti scelta è vuota («There are no results for this class», Europei e
+Mondiali 470 2026) prova la «Final Series» e poi le altre schede della classe; la nazione si ricava
+anche dal nome del file della bandiera (eurilca.eu: .../flags/GBR.png).
 
 Novità della 1.6: fra più schede Sailti della stessa classe sceglie la classifica complessiva (scarta
 «Final Series» e «Qualifying Series», Mondiali 470 2026); una pagina quasi vuota (risposta 202) viene
@@ -334,6 +338,9 @@ def testo_cella(cella):
         img = cella.find("img")
         if img is not None:
             testo = pulisci(img.get("alt") or img.get("title") or "")
+            if not testo:
+                m = re.search(r"flags?/([A-Za-z]{3})\.\w+$", img.get("src") or "")
+                testo = m.group(1).upper() if m else ""
     return testo
 
 
@@ -1312,18 +1319,30 @@ def leggi():
                     + " nell'elenco delle classi di questa pagina.")
                 riepilogo.append((e, "classe non trovata nella pagina Sailti" if not giuste else "classe ambigua"))
                 continue
-            et, u = giuste[0]
-            log(f"  classe «{et}» → {u}")
-            try:
-                if u not in cache:
-                    time.sleep(PAUSA_WEB)
-                    cache[u] = scarica(u)
-                    salva_pagina(u, cache[u][2])
-                html = cache[u][2]
-            except RuntimeError as err:
-                log(f"  classifica della classe non raggiungibile: {err}")
-                riepilogo.append((e, "non raggiungibile"))
-                errori += 1
+            # schede di riserva: se la classifica complessiva è vuota (formato 2026 dei 470: i risultati
+            # stanno solo in «Final Series»), provo la Final Series e poi le altre schede della classe
+            tutte = [(et2, u2) for et2, u2 in schede if corrisponde_classe(et2, e["classe"])]
+            riserve = sorted([c for c in tutte if c != giuste[0]],
+                             key=lambda c: 0 if re.search(r"final|-fs\b", c[0], re.I) else 1)
+            letta = False
+            for et, u in [giuste[0]] + riserve:
+                log(f"  classe «{et}» → {u}")
+                try:
+                    if u not in cache:
+                        time.sleep(PAUSA_WEB)
+                        cache[u] = scarica(u)
+                        salva_pagina(u, cache[u][2])
+                    html = cache[u][2]
+                except RuntimeError as err:
+                    log(f"  classifica della classe non raggiungibile: {err}")
+                    continue
+                if re.search(r"There are no results for this class", html, re.I) and not tabelle_candidate(html)[0]:
+                    log("  questa scheda non ha risultati: provo la successiva.")
+                    continue
+                letta = True
+                break
+            if not letta:
+                riepilogo.append((e, "Sailti: nessuna scheda con risultati"))
                 continue
             e["_sailti"] = True
         elif barche_speciali is None and "resultsajax" in html:
@@ -1450,7 +1469,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.6 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.7 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
