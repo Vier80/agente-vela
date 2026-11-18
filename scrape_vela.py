@@ -1,4 +1,8 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.9 del 18/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.9.1 del 18/11/2026, scheda 35)
+
+Novità della 1.9.1: se il file indicato in eventi_vela.csv non è nel percorso esatto (es. PDF caricato
+nella cartella principale invece che in pdf/, o con maiuscole e spazi diversi) lo cerco in tutto il
+repository per nome; se non lo trovo, il rapporto elenca i PDF presenti.
 
 Novità della 1.9 (Mondiali Kite 2026, classifiche solo in PDF):
 - LETTORE PDF (pdfplumber, da aggiungere a requirements.txt): un PDF di risultati viene trasformato in
@@ -234,6 +238,36 @@ def e_locale(url):
     return not re.match(r"https?://", url or "", re.I)
 
 
+def _semplifica(nome):
+    """Nome di file ridotto all'osso per confrontarlo: '2026 FK Worlds-Men.PDF' -> '2026fkworldsmenpdf'."""
+    return re.sub(r"[^a-z0-9]", "", nome.lower())
+
+
+def elenco_pdf():
+    """Tutti i PDF presenti nel repository (percorsi relativi), per aiutare a capire dove sono finiti."""
+    trovati = []
+    for radice, cartelle, file in os.walk(CARTELLA):
+        cartelle[:] = [c for c in cartelle if not c.startswith(".") and c != "pagine_salvate"]
+        for f in file:
+            if f.lower().endswith(".pdf"):
+                trovati.append(os.path.relpath(os.path.join(radice, f), CARTELLA))
+    return sorted(trovati)
+
+
+def trova_file(url):
+    """Percorso del file indicato in eventi_vela.csv. Se non è esattamente lì, lo cerco in tutto il
+    repository con lo stesso nome (senza badare a maiuscole, spazi, trattini e trattini bassi):
+    così va bene anche un PDF caricato nella cartella principale invece che in pdf/."""
+    esatto = os.path.join(CARTELLA, url)
+    if os.path.exists(esatto):
+        return esatto
+    cercato = _semplifica(os.path.basename(url))
+    for relativo in elenco_pdf():
+        if _semplifica(os.path.basename(relativo)) == cercato:
+            return os.path.join(CARTELLA, relativo)
+    return None
+
+
 def scarica(url):
     """Scarica una pagina. Restituisce (codice HTTP, tipo di contenuto, testo) o solleva un errore.
 
@@ -243,9 +277,13 @@ def scarica(url):
     - PDF: lo trasformo subito in una pagina HTML con le sue tabelle (pdf_in_html), così il resto
       dell'agente lo legge come una pagina qualsiasi. Il tipo diventa "application/pdf (convertito)"."""
     if e_locale(url):
-        percorso = os.path.join(CARTELLA, url)
-        if not os.path.exists(percorso):
-            raise RuntimeError(f"il file {url} non c'è nel repository (va caricato nella cartella giusta)")
+        percorso = trova_file(url)
+        if percorso is None:
+            pdf_presenti = elenco_pdf()
+            raise RuntimeError(f"il file {url} non c'è nel repository. PDF presenti nel repository: "
+                               + (", ".join(pdf_presenti) if pdf_presenti else "nessuno"))
+        if os.path.relpath(percorso, CARTELLA) != os.path.normpath(url):
+            log(f"  (file trovato come {os.path.relpath(percorso, CARTELLA)})")
         with open(percorso, "rb") as f:
             dati = f.read()
         if url.lower().endswith(".pdf"):
@@ -1769,7 +1807,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.9 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.9.1 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'} · lettore PDF "
         f"{'disponibile' if pdfplumber else 'NON disponibile (manca pdfplumber)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
