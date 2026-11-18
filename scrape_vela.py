@@ -1,4 +1,18 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.4 del 17/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.5 del 18/11/2026, scheda 35)
+
+Novità della 1.5 (dopo la Solo prova degli eventi nuovi):
+- LETTORE MANAGE2SAIL (Kieler Woche 2026): dalla pagina dell'evento ricava l'elenco delle classi e
+  scarica la classifica di ciascuna dall'interfaccia dati del sito (api/event/.../regattaresult/...);
+- PAGINE INDICE: se una pagina non contiene la classifica ma un link alla classifica della classe
+  (siti dei Mondiali ILCA, EurILCA, Long Beach...) l'agente segue quel link; se contiene il link al
+  sito Sailti dell'evento (pagine evento di 470.org) apre la sua pagina "race-resultsall";
+- pagine che rispondono "enable javascript" con errore 403/404: riprovate con il browser automatico;
+- classi giovanili (Under 19, Under 17, Youth, Junior, Master) mai scambiate per quelle olimpiche
+  (iQFOiL Games di Cádiz); se due etichette restano possibili, si preferisce quella col genere giusto
+  e si scarta quella "open" (ILCA 6 open a Kiel);
+- ID World Sailing scritti sempre in maiuscolo ("gbrew20" -> "GBREW20");
+- la colonna Fonte riporta la pagina da cui è stata davvero letta la classifica;
+- una classifica che non comincia dal 1° (es. pagina provvisoria senza la finale) non viene scritta.
 
 Novità della 1.4 (dopo il primo lancio vero, interrotto da un errore di rete):
 - le chiamate a Notion usano una connessione che resta aperta (meno "strette di mano" SSL);
@@ -72,6 +86,8 @@ TEMPO_MAX_MINUTI                   dopo quanti minuti smettere di scrivere (defa
 """
 import csv
 import datetime as dt
+import html as htmlmod
+import json
 import os
 import re
 import sys
@@ -406,7 +422,7 @@ def leggi_tabella(tabella):
             continue
         # ID World Sailing: alcune piattaforme (Sailti) collegano ogni nome al profilo
         # https://www.sailing.org/sailor?ref=ESPJX1  → ESPJX1
-        ids = re.findall(r"sailing\.org/sailors?[^\"'<>]*?[?&]ref=([A-Za-z0-9]+)", str(tr))
+        ids = [i.upper() for i in re.findall(r"sailing\.org/sailors?[^\"'<>]*?[?&]ref=([A-Za-z0-9]+)", str(tr))]
         valori = celle(tr)
         if any(valori):
             corpo.append(valori)
@@ -537,6 +553,24 @@ PAROLE_CLASSE = {
     "Men's Kite": r"kite", "Women's Kite": r"kite",
 }
 DONNE = re.compile(r"women|woman|female|ladies|femm|\bw\b", re.I)
+# categorie che NON sono la classe olimpica senior (foglio, punto 13: U23, giovanili e master esclusi)
+GIOVANILI = re.compile(r"under|\bu\s?-?(1[5-9]|2[0-3])\b|-u(1[5-9]|2[0-3])\b|youth|junior|master|\bu(1[5-9]|2[0-3])", re.I)
+
+
+def scegli_etichetta(candidati, classe):
+    """Fra più etichette che corrispondono alla classe tiene la più probabile:
+    per le classi femminili quelle che nominano le donne; poi scarta quelle "open" (es. 'ILCA 6 (open)').
+    candidati = [(etichetta, valore)]. Restituisce la lista ridotta (va bene solo se resta 1 elemento)."""
+    if len(candidati) > 1 and classe.startswith("Women"):
+        donne = [c for c in candidati if DONNE.search(c[0]) or re.search(r"6w|_w\b|-w\b", c[0], re.I)]
+        candidati = donne or candidati
+    if len(candidati) > 1 and not classe.startswith("Women"):
+        uomini = [c for c in candidati if not re.search(r"wom|ladies|6w\b", c[0], re.I)]
+        candidati = uomini or candidati
+    if len(candidati) > 1:
+        senza_open = [c for c in candidati if not re.search(r"\bopen\b", c[0], re.I)]
+        candidati = senza_open or candidati
+    return candidati
 
 
 def corrisponde_classe(testo, classe):
@@ -544,6 +578,8 @@ def corrisponde_classe(testo, classe):
     regola = re.compile(PAROLE_CLASSE[classe], re.I)
     serve_genere = classe in {"Men's iQFOIL", "Women's iQFOIL", "Men's Kite", "Women's Kite"}
     donna = classe.startswith("Women")
+    if GIOVANILI.search(testo or ""):
+        return False
     return bool(regola.search(testo or "")) and (not serve_genere or bool(DONNE.search(testo)) == donna)
 
 
@@ -1050,6 +1086,93 @@ def esamina_pagina_js(url, html):
         log(f"    data-url: {urljoin(url, el['data-url'])}")
 
 
+# ====================================================================== MANAGE2SAIL
+def leggi_manage2sail(html, classe):
+    """Kieler Woche 2026 e altre regate su Manage2Sail.
+
+    La pagina dell'evento contiene la tabella delle classi con i link "#!entries?classId=<codice>".
+    La classifica di una classe si scarica in formato JSON da
+    https://www.manage2sail.com/api/event/<codice evento>/regattaresult/<codice classe>
+    Restituisce (etichetta della classe, indirizzo JSON, barche)."""
+    m = re.search(r"api/event/([0-9a-f-]{36})", html)
+    if not m:
+        raise RuntimeError("codice dell'evento Manage2Sail non trovato nella pagina")
+    evento = m.group(1)
+    classi = [(htmlmod.unescape(pulisci(n)), c) for n, c in re.findall(
+        r"<td>([^<]{2,80})</td>\s*<td>\s*<a href=\"[^\"]*#!entries\?classId=([0-9a-f-]{36})", html)]
+    log(f"  pagina Manage2Sail con {len(classi)} classi: " + ", ".join(n for n, _ in classi[:12])
+        + ("..." if len(classi) > 12 else ""))
+    giuste = scegli_etichetta([(n, c) for n, c in classi if corrisponde_classe(n, classe)], classe)
+    if len(giuste) != 1:
+        raise RuntimeError("classe " + ("non trovata" if not giuste else "ambigua: " + ", ".join(n for n, _ in giuste)))
+    nome, codice = giuste[0]
+    url_json = f"https://www.manage2sail.com/api/event/{evento}/regattaresult/{codice}"
+    log(f"  classe «{nome}» → {url_json}")
+    time.sleep(PAUSA_WEB)
+    stato, _, testo = scarica(url_json)
+    if stato >= 400:
+        raise RuntimeError(f"il sito ha risposto {stato} alla richiesta dei dati")
+    salva_pagina("json/" + url_json, testo, estensione=".json")
+    dati = json.loads(testo)
+    barche = []
+    for r in dati.get("EntryResults") or []:
+        pos = r.get("Rank")
+        if not isinstance(pos, int):
+            continue
+        nome_barca = pulisci(r.get("Name") or r.get("TeamName") or "")
+        prodiere = ""
+        if classe in DOPPI:
+            for c in (r.get("Crew"), r.get("Crew1Name")):
+                if c and pulisci(c).upper() not in ("", "N/A"):
+                    prodiere = pulisci(c)
+                    break
+            if not prodiere and " / " in (r.get("TeamName") or ""):
+                nome_barca, prodiere = dividi_equipaggio(r["TeamName"])
+        prove = [str(x.get("Points", "")) for x in r.get("EntryRaceResults") or []]
+        mai_partita = bool(prove) and all(NON_PARTITA.search(p.upper()) for p in prove)
+        barche.append({
+            "posizione": pos, "timoniere": nome_barca, "prodiere": prodiere,
+            "noc": (r.get("Country") or r.get("SailNumberCountry") or "").strip().upper()[:3],
+            "velico": pulisci(r.get("SailNumber") or ""), "id1": "", "id2": "",
+            "punti": numero(str(r.get("NetPoints") or "")),
+            "note": "mai partita (DNC/DNS in tutte le prove)" if mai_partita else "",
+        })
+    barche.sort(key=lambda b: b["posizione"])
+    return nome, url_json, barche
+
+
+# ====================================================================== PAGINE INDICE
+def link_successivo(url, html, classe):
+    """Se la pagina non è la classifica, cerca il link da seguire. Restituisce (indirizzo, motivo) o None.
+
+    1) sito Sailti dell'evento (es. 2026worlds.470.org/en/default/races/race): apro race-resultsall;
+    2) link a una pagina di risultati della classe (es. 'ILCA-7M-2025-CHN-Results.html', 'ilca6w.htm',
+       '2025worlds_men.html'): lo seguo se ce n'è uno solo adatto alla classe."""
+    host = urlparse(url).netloc
+    for m in re.finditer(r"""https?://([^/"'\s<>]+)/([a-z]{2})/default/races/race(?:-resultsall)?\b""", html):
+        if m.group(1) != host:
+            return f"https://{m.group(1)}/{m.group(2)}/default/races/race-resultsall", "sito Sailti dell'evento"
+    zuppa = BeautifulSoup(html, "lxml")
+    candidati = []
+    for a in zuppa.find_all("a", href=True):
+        h = urljoin(url, a["href"]).split("#")[0]
+        testo = pulisci(a.get_text(" ")) + " " + h
+        if not re.search(r"\.html?(\?|$)|race-results|/results?/", h, re.I):
+            continue
+        if not re.search(r"result|classifica|standing", testo, re.I):
+            continue
+        if h.rstrip("/") == url.split("#")[0].rstrip("/"):
+            continue
+        if corrisponde_classe(testo, classe) and (h, h) not in [(c[1], c[1]) for c in candidati]:
+            candidati.append((testo, h))
+    candidati = scegli_etichetta(candidati, classe)
+    if len(candidati) == 1:
+        return candidati[0][1], "link alla classifica della classe"
+    if candidati:
+        log("  link possibili (più di uno, non ne seguo nessuno): " + " | ".join(c[1] for c in candidati[:6]))
+    return None
+
+
 def leggi():
     """Legge le classifiche di eventi_vela.csv e (se non è una prova) le scrive in Notion."""
     eventi, problemi = leggi_eventi()
@@ -1110,18 +1233,63 @@ def leggi():
             errori += 1
             continue
         log(f"  risposta {codice} · {tipo.split(';')[0]} · {len(html)} caratteri")
+        if codice in (403, 404) and re.search(r"enable javascript", html, re.I) and BROWSER.disponibile():
+            # alcuni siti (es. eurilca.eu) rispondono "abilita JavaScript": riprovo con il browser vero
+            log("  il sito chiede JavaScript: riprovo con il browser automatico...")
+            try:
+                html = BROWSER.apri(e["url"])
+                salva_pagina(e["url"] + "__browser", html)
+                codice = 200 if not re.search(r"404|can.t be found|not found", pulisci(
+                    BeautifulSoup(html, "lxml").get_text(" "))[:3000], re.I) else codice
+            except Exception as err:
+                log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
         if codice >= 400:
             riepilogo.append((e, f"rifiutata ({codice})"))
             continue
+        e["_fonte"] = e["url"]
+        barche_speciali = None
+        if "manage2sail.com" in e["url"]:
+            # ---- piattaforma Manage2Sail: classifica dall'interfaccia dati JSON
+            try:
+                etichetta, fonte, barche_speciali = leggi_manage2sail(html, e["classe"])
+                e["_fonte"], e["_sailti"] = e["url"], True      # pagina condivisa ma classe riconosciuta
+            except (RuntimeError, ValueError) as err:
+                log(f"  Manage2Sail: {err}")
+                riepilogo.append((e, "Manage2Sail: " + str(err)[:60]))
+                continue
+        # ---- pagine indice: seguo al massimo due link verso la classifica vera
+        for _ in range(2):
+            if barche_speciali is not None or "resultsajax" in html:
+                break
+            if tabelle_candidate(html)[0] and not re.search(r"/default/races/race\b", html):
+                break
+            dopo = link_successivo(e["_fonte"], html, e["classe"])
+            if not dopo:
+                break
+            nuovo, motivo = dopo
+            log(f"  seguo il {motivo}: {nuovo}")
+            try:
+                if nuovo not in cache:
+                    time.sleep(PAUSA_WEB)
+                    cache[nuovo] = scarica(nuovo)
+                    salva_pagina(nuovo, cache[nuovo][2])
+                codice, tipo, html = cache[nuovo]
+            except RuntimeError as err:
+                log(f"  NON raggiungibile: {err}")
+                break
+            log(f"  risposta {codice} · {tipo.split(';')[0]} · {len(html)} caratteri")
+            if codice >= 400:
+                break
+            e["_fonte"], e["_seguita"] = nuovo, True
         if "pdf" in tipo.lower() or e["url"].lower().endswith(".pdf"):
             log("  è un PDF: questa versione legge solo pagine web. [DA DECIDERE] lettore PDF.")
             riepilogo.append((e, "PDF"))
             continue
-        schede = schede_sailti(e["url"], html) if "resultsajax" in html else []
+        schede = [] if barche_speciali is not None else (schede_sailti(e["_fonte"], html) if "resultsajax" in html else [])
         if schede:
             # ---- piattaforma Sailti: scelgo la classe e scarico solo la sua classifica
             log(f"  pagina Sailti con {len(schede)} classi: " + ", ".join(et for et, _ in schede))
-            giuste = [(et, u) for et, u in schede if corrisponde_classe(et, e["classe"])]
+            giuste = scegli_etichetta([(et, u) for et, u in schede if corrisponde_classe(et, e["classe"])], e["classe"])
             if len(giuste) != 1:
                 log(f"  ATTENZIONE: la classe {e['classe']} " + ("non c'è" if not giuste else "è ambigua")
                     + " nell'elenco delle classi di questa pagina.")
@@ -1141,42 +1309,50 @@ def leggi():
                 errori += 1
                 continue
             e["_sailti"] = True
-        elif "resultsajax" in html:
+        elif barche_speciali is None and "resultsajax" in html:
             log("  pagina Sailti senza elenco delle classi (forse i risultati non sono ancora pubblicati).")
             testo = pulisci(BeautifulSoup(html, "lxml").get_text(" "))
             if re.search(r"not yet uploaded|no results", testo, re.I):
                 log("  il sito dice: risultati non ancora pubblicati.")
             riepilogo.append((e, "Sailti senza risultati"))
             continue
-        candidate, n_tabelle = tabelle_candidate(html)
-        if not candidate and BROWSER.disponibile() and not e.get("_sailti"):
-            # pagina senza classifiche: la riapro con il browser automatico (una volta sola per indirizzo)
-            chiave = "browser:" + e["url"]
-            if chiave not in cache:
-                log("  nessuna classifica nella pagina scaricata: la riapro con il browser automatico...")
-                try:
-                    html_b = BROWSER.apri(e["url"])
-                    salva_pagina(e["url"] + "__browser", html_b)
-                    cache[chiave] = (html_b, list(BROWSER.json_visti))
-                except Exception as err:
-                    log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
-                    cache[chiave] = ("", [])
-            html_b, json_visti = cache[chiave]
-            if json_visti:
-                log(f"  dati JSON scaricati dalla pagina: {len(json_visti)} (copie in pagine_salvate/json/)")
-                for u, n in json_visti[:12]:
-                    log(f"    {n:>8} caratteri · {u[:160]}")
-            if html_b:
-                html = html_b
-                candidate, n_tabelle = tabelle_candidate(html)
-                log(f"  con il browser: tabelle {n_tabelle}, classifiche {len(candidate)}")
-        scelte = scegli_tabelle(candidate, int(e["tabella"]) if e.get("tabella") else None)
-        barche = righe_classifica(scelte, e["classe"])
-        diagnosi_classifica(e, candidate, n_tabelle, scelte, barche)
+        n_tabelle = 0
+        if barche_speciali is not None:
+            barche = barche_speciali
+            for b in barche[:3] + ([barche[-1]] if len(barche) > 3 else []):
+                log(f"    {b['posizione']:>3}. {b['timoniere']}" + (f" / {b['prodiere']}" if b["prodiere"] else "")
+                    + f" · {b['noc'] or '?'} · velico '{b['velico']}' · punti {b['punti']}" + (f" · {b['note']}" if b["note"] else ""))
+            log(f"  barche: {len(barche)} · mai partite: {sum(1 for b in barche if b['note'])}")
+        else:
+            candidate, n_tabelle = tabelle_candidate(html)
+            if not candidate and BROWSER.disponibile() and not e.get("_sailti"):
+                # pagina senza classifiche: la riapro con il browser automatico (una volta sola per indirizzo)
+                chiave = "browser:" + e["url"]
+                if chiave not in cache:
+                    log("  nessuna classifica nella pagina scaricata: la riapro con il browser automatico...")
+                    try:
+                        html_b = BROWSER.apri(e["url"])
+                        salva_pagina(e["url"] + "__browser", html_b)
+                        cache[chiave] = (html_b, list(BROWSER.json_visti))
+                    except Exception as err:
+                        log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
+                        cache[chiave] = ("", [])
+                html_b, json_visti = cache[chiave]
+                if json_visti:
+                    log(f"  dati JSON scaricati dalla pagina: {len(json_visti)} (copie in pagine_salvate/json/)")
+                    for u, n in json_visti[:12]:
+                        log(f"    {n:>8} caratteri · {u[:160]}")
+                if html_b:
+                    html = html_b
+                    candidate, n_tabelle = tabelle_candidate(html)
+                    log(f"  con il browser: tabelle {n_tabelle}, classifiche {len(candidate)}")
+            scelte = scegli_tabelle(candidate, int(e["tabella"]) if e.get("tabella") else None)
+            barche = righe_classifica(scelte, e["classe"])
+            diagnosi_classifica(e, candidate, n_tabelle, scelte, barche)
         if not barche:
             if re.search(r"not yet uploaded any race results", html, re.I):
                 log("  il sito dice: risultati non ancora pubblicati su questa pagina.")
-            if n_tabelle == 0 and re.search(r"<script", html, re.I):
+            if barche_speciali is None and n_tabelle == 0 and re.search(r"<script", html, re.I):
                 log("  nessuna tabella: la pagina è probabilmente costruita con JavaScript "
                     "(es. Sailti, Manage2Sail). Serve un lettore apposito. Indizi trovati nella pagina:")
                 esamina_pagina_js(e["url"], html)
@@ -1194,13 +1370,18 @@ def leggi():
             nuove.append({**b, "title": titolo, "classe": e["classe"], "barche": len(barche),
                           "evento": e.get("nome") or e["id_evento"], "tipo": e["tipo"],
                           "inizio": e.get("data_inizio"), "fine": e.get("data_fine") or e.get("data_inizio"),
-                          "fonte": e["url"], "id": uid})
+                          "fonte": e.get("_fonte") or e["url"], "id": uid})
         log(f"  da scrivere: {len(nuove)} (già presenti: {len(barche) - len(nuove)})")
+        if min(b["posizione"] for b in barche) > 1:
+            # es. pagina Sailwave "provvisoria" senza i primi 10 della finale: non scrivo una classifica a metà
+            log("  NON scritta: la classifica non parte dal 1° (pagina incompleta o flotta sbagliata).")
+            riepilogo[-1] = (e, f"{len(barche)} barche, ma classifica incompleta")
+            continue
         if e["_senza_data"]:
             log("  NON scritta: manca data_inizio in eventi_vela.csv.")
             riepilogo[-1] = (e, f"{len(barche)} barche, ma manca data_inizio")
             continue
-        if (e["id_evento"], e["classe"]) in ambigue and not e.get("_sailti"):
+        if (e["id_evento"], e["classe"]) in ambigue and not (e.get("_sailti") or e.get("_seguita")):
             log("  NON scritta: la pagina contiene più classi; indica il numero della tabella "
                 "giusta nella colonna 'tabella' di eventi_vela.csv (lo vedi qui sopra).")
             riepilogo[-1] = (e, f"{len(barche)} barche, ma manca 'tabella'")
@@ -1252,7 +1433,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.4 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.5 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
