@@ -1,4 +1,8 @@
-"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.5 del 18/11/2026, scheda 35)
+"""Agente Vela – classifiche finali delle regate olimpiche (versione 1.6 del 18/11/2026, scheda 35)
+
+Novità della 1.6: fra più schede Sailti della stessa classe sceglie la classifica complessiva (scarta
+«Final Series» e «Qualifying Series», Mondiali 470 2026); una pagina quasi vuota (risposta 202) viene
+aperta con il browser prima di cercare i link alla classifica.
 
 Novità della 1.5 (dopo la Solo prova degli eventi nuovi):
 - LETTORE MANAGE2SAIL (Kieler Woche 2026): dalla pagina dell'evento ricava l'elenco delle classi e
@@ -570,6 +574,11 @@ def scegli_etichetta(candidati, classe):
     if len(candidati) > 1:
         senza_open = [c for c in candidati if not re.search(r"\bopen\b", c[0], re.I)]
         candidati = senza_open or candidati
+    if len(candidati) > 1:
+        # Sailti dei Mondiali 470 2026: «470 Mixed», «470 Mixed Final Series», «470 Mixed Qualifying Series»:
+        # la classifica finale complessiva è quella senza «Series»
+        complessiva = [c for c in candidati if not re.search(r"series|qualif|-[fq]s\b", c[0], re.I)]
+        candidati = complessiva or candidati
     return candidati
 
 
@@ -1261,6 +1270,14 @@ def leggi():
         for _ in range(2):
             if barche_speciali is not None or "resultsajax" in html:
                 break
+            if len(html) < 2000 and BROWSER.disponibile():
+                # pagina quasi vuota (es. risposta 202 dei siti ILCA): la vera pagina la costruisce il browser
+                log("  pagina quasi vuota: la apro con il browser automatico per cercare i link...")
+                try:
+                    html = BROWSER.apri(e["_fonte"], attesa_tabella_ms=5000)
+                    salva_pagina(e["_fonte"] + "__browser", html)
+                except Exception as err:
+                    log(f"  il browser non è riuscito ad aprire la pagina: {str(err)[:200]}")
             if tabelle_candidate(html)[0] and not re.search(r"/default/races/race\b", html):
                 break
             dopo = link_successivo(e["_fonte"], html, e["classe"])
@@ -1433,7 +1450,7 @@ def leggi():
 
 # ====================================================================== MAIN
 def main():
-    log(f"Agente Vela 1.5 · modalità {MODALITA} · browser automatico "
+    log(f"Agente Vela 1.6 · modalità {MODALITA} · browser automatico "
         f"{'disponibile' if BROWSER.disponibile() else 'NON disponibile (manca playwright)'}")
     log(f"Agente Vela · modalità {MODALITA} · "
         f"{'SOLO PROVA: non scrivo nulla su Notion' if DRY_RUN or MODALITA == 'scopri' else 'SCRITTURA su Notion'} · "
